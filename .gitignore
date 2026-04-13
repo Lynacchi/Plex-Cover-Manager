@@ -1,0 +1,37 @@
+# Build artifacts
+/*.exe
+/*.dll
+*.syso
+/*.rc
+*.tmp
+/dist/
+/release/
+/build/
+
+# Generated launcher payload; build.ps1 recreates this.
+cmd/launcher/payload/*
+!cmd/launcher/payload/placeholder.txt
+
+# Go test and coverage output
+*.test
+coverage.out
+coverage.html
+
+# Local environment and logs
+/.env
+/.env.*
+/*.log
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+
+# Local scratch folders
+tmp/
+scratch/
+mesa-test/
+mesa-full-test/
