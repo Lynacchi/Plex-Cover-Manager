@@ -45,11 +45,12 @@ type Application struct {
 	items    []models.MediaItem
 	filtered []models.MediaItem
 
-	searchText   string
-	sortAsc      bool
-	statusFilter string
-	statusLabel  *widget.Label
-	list         *widget.List
+	searchText      string
+	sortAsc         bool
+	statusFilter    string
+	statusLabel     *widget.Label
+	list            *widget.List
+	currentDetailID string
 
 	scanCancel context.CancelFunc
 }
@@ -75,6 +76,7 @@ func NewApplication(configManager *config.Manager) *Application {
 
 func (a *Application) Run() {
 	diagnostics.Log("ui: run begin")
+	a.window.SetOnDropped(a.handleFileDrop)
 	a.showMainList()
 	diagnostics.Log("ui: showing window")
 	a.window.Show()
@@ -87,8 +89,40 @@ func (a *Application) Run() {
 	diagnostics.Log("ui: app run returned")
 }
 
+func (a *Application) handleFileDrop(_ fyne.Position, uris []fyne.URI) {
+	var paths []string
+	for _, uri := range uris {
+		p := uri.Path()
+		ext := strings.ToLower(filepath.Ext(p))
+		if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) == 0 {
+		return
+	}
+	detailID := a.currentDetailID
+	if detailID != "" {
+		item, ok := a.findItem(detailID)
+		if !ok {
+			return
+		}
+		plans := cover.PlanImportsForItem(paths, item)
+		a.showImportPreview("Cover hinzufügen (Drag & Drop)", plans, func() {
+			a.showDetail(detailID)
+		})
+	} else {
+		a.mu.RLock()
+		items := append([]models.MediaItem(nil), a.items...)
+		a.mu.RUnlock()
+		plans := cover.PlanImports(paths, items)
+		a.showImportPreview("Batch-Import (Drag & Drop)", plans, nil)
+	}
+}
+
 func (a *Application) showMainList() {
 	diagnostics.Log("ui: show main list")
+	a.currentDetailID = ""
 	title := widget.NewLabelWithStyle("Plex Cover Manager", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	search := widget.NewEntry()
@@ -134,9 +168,16 @@ func (a *Application) showMainList() {
 			return len(a.filtered)
 		},
 		func() fyne.CanvasObject {
-			label := widget.NewLabel("Titel")
-			label.Wrapping = fyne.TextWrapWord
-			return container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, label)
+			titleLabel := widget.NewLabelWithStyle("Titel", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+			titleLabel.Truncation = fyne.TextTruncateEllipsis
+			statusLabel := widget.NewLabel("Status")
+			statusLabel.Importance = widget.LowImportance
+			statusLabel.Truncation = fyne.TextTruncateEllipsis
+			typeLabel := widget.NewLabel("[Serie]")
+			typeLabel.Importance = widget.LowImportance
+			topLine := container.NewBorder(nil, nil, typeLabel, nil, titleLabel)
+			textBox := container.NewVBox(topLine, statusLabel)
+			return container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, textBox)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			a.mu.RLock()
@@ -146,11 +187,18 @@ func (a *Application) showMainList() {
 			}
 			item := a.filtered[id]
 			row := obj.(*fyne.Container)
-			label := row.Objects[0].(*widget.Label)
-			dotBox := row.Objects[1].(*fyne.Container)
-			dot := dotBox.Objects[0].(*canvas.Circle)
+			textBox := row.Objects[0].(*fyne.Container)
+			topLine := textBox.Objects[0].(*fyne.Container)
+			titleLabel := topLine.Objects[0].(*widget.Label)
+			typeLabel := topLine.Objects[1].(*widget.Label)
+			statusLabel := textBox.Objects[1].(*widget.Label)
+			dotCenter := row.Objects[1].(*fyne.Container)
+			dotGrid := dotCenter.Objects[0].(*fyne.Container)
+			dot := dotGrid.Objects[0].(*canvas.Circle)
 			applyStatusDot(dot, item.Status)
-			label.SetText(fmt.Sprintf("[%s] %s\n%s", item.TypeLabel(), item.Title, item.StatusLabel()))
+			typeLabel.SetText(fmt.Sprintf("[%s]", item.TypeLabel()))
+			titleLabel.SetText(item.Title)
+			statusLabel.SetText(item.StatusLabel())
 		},
 	)
 	a.list.OnSelected = func(id widget.ListItemID) {
@@ -283,6 +331,7 @@ func (a *Application) showDetail(itemID string) {
 		a.showMainList()
 		return
 	}
+	a.currentDetailID = itemID
 
 	backButton := widget.NewButton("Zurück", a.showMainList)
 	title := widget.NewLabelWithStyle(fmt.Sprintf("%s [%s]", item.Title, item.TypeLabel()), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
@@ -304,6 +353,13 @@ func (a *Application) showDetail(itemID string) {
 	pathLabel := widget.NewLabel(fmt.Sprintf("Pfad: %s", displayItemPath(item)))
 	pathLabel.Wrapping = fyne.TextWrapWord
 	pathLabel.Selectable = true
+	openPathButton := widget.NewButton("Ordner öffnen", func() {
+		target := displayItemPath(item)
+		if err := openFolderInExplorer(target); err != nil {
+			dialog.ShowError(err, a.window)
+		}
+	})
+	pathRow := container.NewBorder(nil, nil, nil, openPathButton, pathLabel)
 
 	body := container.NewVBox(
 		structure,
@@ -311,7 +367,7 @@ func (a *Application) showDetail(itemID string) {
 		widget.NewSeparator(),
 		slotRows,
 		widget.NewSeparator(),
-		pathLabel,
+		pathRow,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
 }
@@ -519,6 +575,7 @@ func (a *Application) applyPlans(plans []cover.ImportPlan, after func()) {
 }
 
 func (a *Application) showSettings() {
+	a.currentDetailID = ""
 	cfg := a.config.Get()
 	backButton := widget.NewButton("Zurück", func() {
 		a.showMainList()
@@ -574,6 +631,17 @@ func (a *Application) showSettings() {
 	configPath := widget.NewLabel(fmt.Sprintf("Config: %s", a.config.Path()))
 	configPath.Wrapping = fyne.TextWrapWord
 	configPath.Selectable = true
+	openConfigFolderButton := widget.NewButton("Ordner öffnen", func() {
+		if err := openFileInExplorer(a.config.Path()); err != nil {
+			dialog.ShowError(err, a.window)
+		}
+	})
+	openConfigFileButton := widget.NewButton("Datei öffnen", func() {
+		if err := openFileWithDefault(a.config.Path()); err != nil {
+			dialog.ShowError(err, a.window)
+		}
+	})
+	configRow := container.NewBorder(nil, nil, nil, container.NewHBox(openConfigFolderButton, openConfigFileButton), configPath)
 
 	body := container.NewVBox(
 		widget.NewLabelWithStyle("Medienpfade", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -587,7 +655,7 @@ func (a *Application) showSettings() {
 			container.NewBorder(nil, nil, widget.NewLabel("Max. Höhe"), nil, heightEntry),
 		),
 		widget.NewSeparator(),
-		configPath,
+		configRow,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
 }
@@ -733,7 +801,7 @@ func statusDot(status models.CoverStatus) fyne.CanvasObject {
 	dot.StrokeColor = color.NRGBA{R: 10, G: 10, B: 10, A: 180}
 	dot.StrokeWidth = 1
 	applyStatusDot(dot, status)
-	return container.NewGridWrap(fyne.NewSize(14, 14), dot)
+	return container.NewCenter(container.NewGridWrap(fyne.NewSize(14, 14), dot))
 }
 
 func applyStatusDot(dot *canvas.Circle, status models.CoverStatus) {
@@ -755,5 +823,5 @@ func reachabilityDot(reachable bool) fyne.CanvasObject {
 	}
 	dot.StrokeColor = color.NRGBA{R: 10, G: 10, B: 10, A: 180}
 	dot.StrokeWidth = 1
-	return container.NewGridWrap(fyne.NewSize(12, 12), dot)
+	return container.NewCenter(container.NewGridWrap(fyne.NewSize(12, 12), dot))
 }

@@ -7,9 +7,28 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
+
+func openFolderInExplorer(path string) error {
+	cmd := exec.Command("explorer.exe", filepath.FromSlash(path))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
+
+func openFileInExplorer(filePath string) error {
+	cmd := exec.Command("explorer.exe", "/select,", filepath.FromSlash(filePath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
+
+func openFileWithDefault(filePath string) error {
+	cmd := exec.Command("cmd", "/c", "start", "", filepath.FromSlash(filePath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
 
 func selectCoverFiles(multi bool) ([]string, error) {
 	multiValue := "$false"
