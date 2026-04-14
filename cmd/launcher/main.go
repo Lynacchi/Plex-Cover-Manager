@@ -19,7 +19,7 @@ import (
 const appPayloadName = "PlexCoverManager.app.exe"
 
 var payloadVersion = "dev"
-var appVersion = "0.0.7"
+var appVersion = "0.1.0"
 
 //go:embed payload/*
 var payload embed.FS

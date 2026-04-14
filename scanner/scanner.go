@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"plexcovermanager/cover"
 	"plexcovermanager/models"
 )
 
@@ -30,6 +31,13 @@ var seasonPatterns = []*regexp.Regexp{
 
 var flatEpisodePattern = regexp.MustCompile(`(?i)\bs0*(\d{1,2})e\d{1,3}\b`)
 var yearPattern = regexp.MustCompile(`\((\d{4})\)`)
+
+type coverMatch struct {
+	path  string
+	size  int64
+	found bool
+	exact bool
+}
 
 func ScanLibrary(ctx context.Context, cfg models.AppConfig) ([]models.MediaItem, []models.ScanWarning) {
 	cfg.Normalize()
@@ -162,7 +170,7 @@ func scanSeriesItem(root, showPath, title string, cfg models.AppConfig) (models.
 	})
 	item.Seasons = seasons
 
-	mainSlot := mainCoverSlot(showPath)
+	mainSlot := mainCoverSlot(showPath, title, models.MediaTypeSeries)
 	checkSlotOptimization(&mainSlot, cfg)
 	item.CoverSlots = append(item.CoverSlots, mainSlot)
 	for _, season := range seasons {
@@ -171,7 +179,7 @@ func scanSeriesItem(root, showPath, title string, cfg models.AppConfig) (models.
 			targetDir = season.Path
 		}
 		isFlat := item.FlatStructure
-		slot := seasonCoverSlot(targetDir, season.Number, cfg.ServerMode, isFlat)
+		slot := seasonCoverSlot(targetDir, title, season.Number, cfg.ServerMode, isFlat)
 		checkSlotOptimization(&slot, cfg)
 		item.CoverSlots = append(item.CoverSlots, slot)
 	}
@@ -241,7 +249,7 @@ func workerCount(jobCount int) int {
 }
 
 func scanMovieFolder(root, moviePath, title string, cfg models.AppConfig) models.MediaItem {
-	slot := mainCoverSlot(moviePath)
+	slot := mainCoverSlot(moviePath, title, models.MediaTypeMovie)
 	checkSlotOptimization(&slot, cfg)
 	item := models.MediaItem{
 		ID:          filepath.Clean(moviePath),
@@ -259,17 +267,15 @@ func scanMovieFolder(root, moviePath, title string, cfg models.AppConfig) models
 func scanFlatMovie(root, mediaFilePath, fileName string, cfg models.AppConfig) models.MediaItem {
 	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	target := filepath.Join(root, title+".jpg")
-	existingPath, size, exists := findExistingCover(root, coverNameCandidates(title))
+	match := findExistingCover(root, coverNameCandidates(title), flatMovieSmartCoverCandidates(title), parsedMainCoverMatcher(title))
 	slot := models.CoverSlot{
 		Key:          models.MainSlotKey(),
 		Label:        "Main",
 		Kind:         models.CoverKindMain,
 		SeasonNumber: -1,
 		TargetPath:   target,
-		ExistingPath: existingPath,
-		Exists:       exists,
-		SizeBytes:    size,
 	}
+	applyCoverMatch(&slot, match)
 	checkSlotOptimization(&slot, cfg)
 	item := models.MediaItem{
 		ID:            filepath.Clean(mediaFilePath),
@@ -371,46 +377,43 @@ func parseSeasonFolder(name string) (int, bool) {
 	return 0, false
 }
 
-func mainCoverSlot(dir string) models.CoverSlot {
-	existingPath, size, exists := findExistingCover(dir, coverNameCandidates("poster"))
-	return models.CoverSlot{
+func mainCoverSlot(dir, title string, mediaType models.MediaType) models.CoverSlot {
+	match := findExistingCover(dir, coverNameCandidates("poster"), mainSmartCoverCandidates(title, mediaType), parsedMainCoverMatcher(title))
+	slot := models.CoverSlot{
 		Key:          models.MainSlotKey(),
 		Label:        "Main",
 		Kind:         models.CoverKindMain,
 		SeasonNumber: -1,
 		TargetPath:   filepath.Join(dir, "poster.jpg"),
-		ExistingPath: existingPath,
-		Exists:       exists,
-		SizeBytes:    size,
 	}
+	applyCoverMatch(&slot, match)
+	return slot
 }
 
-func seasonCoverSlot(dir string, season int, mode models.ServerMode, isFlat bool) models.CoverSlot {
+func seasonCoverSlot(dir, title string, season int, mode models.ServerMode, isFlat bool) models.CoverSlot {
 	if mode == models.ServerModeJellyfin && !isFlat {
-		existingPath, size, exists := findExistingCover(dir, coverNameCandidates("poster"))
-		return models.CoverSlot{
+		match := findExistingCover(dir, coverNameCandidates("poster"), seasonSmartCoverCandidates(title, season, true, true), parsedSeasonCoverMatcher(title, season))
+		slot := models.CoverSlot{
 			Key:          models.SeasonSlotKey(season),
 			Label:        seasonLabel(season),
 			Kind:         models.CoverKindSeason,
 			SeasonNumber: season,
 			TargetPath:   filepath.Join(dir, "poster.jpg"),
-			ExistingPath: existingPath,
-			Exists:       exists,
-			SizeBytes:    size,
 		}
+		applyCoverMatch(&slot, match)
+		return slot
 	}
 	base := fmt.Sprintf("season%02d-poster", season)
-	existingPath, size, exists := findExistingCover(dir, coverNameCandidates(base))
-	return models.CoverSlot{
+	match := findExistingCover(dir, coverNameCandidates(base), seasonSmartCoverCandidates(title, season, !isFlat, true), parsedSeasonCoverMatcher(title, season))
+	slot := models.CoverSlot{
 		Key:          models.SeasonSlotKey(season),
 		Label:        seasonLabel(season),
 		Kind:         models.CoverKindSeason,
 		SeasonNumber: season,
 		TargetPath:   filepath.Join(dir, base+".jpg"),
-		ExistingPath: existingPath,
-		Exists:       exists,
-		SizeBytes:    size,
 	}
+	applyCoverMatch(&slot, match)
+	return slot
 }
 
 func coverNameCandidates(base string) []string {
@@ -419,6 +422,165 @@ func coverNameCandidates(base string) []string {
 		candidates = append(candidates, base+ext)
 	}
 	return candidates
+}
+
+func mainSmartCoverCandidates(title string, mediaType models.MediaType) []string {
+	bases := []string{"cover", "folder", "default"}
+	if mediaType == models.MediaTypeMovie {
+		bases = append(bases, "movie")
+	} else {
+		bases = append(bases, "show", "series")
+	}
+	bases = append(bases, titleCoverBases(title, false)...)
+	return coverCandidatesForBases(bases...)
+}
+
+func flatMovieSmartCoverCandidates(title string) []string {
+	return coverCandidatesForBases(titleCoverBases(title, false)...)
+}
+
+func seasonSmartCoverCandidates(title string, season int, includeGenericAliases, includeSeasonBaseAliases bool) []string {
+	var bases []string
+	if includeGenericAliases {
+		bases = append(bases, "cover", "folder", "default", "poster")
+	}
+	if includeSeasonBaseAliases {
+		bases = append(bases, seasonCoverBases(season)...)
+	}
+	bases = append(bases, titleCoverBases(title, true, season)...)
+	return coverCandidatesForBases(bases...)
+}
+
+func titleCoverBases(title string, seasonSpecific bool, season ...int) []string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil
+	}
+	if !seasonSpecific {
+		return []string{
+			title,
+			title + " - Poster",
+			title + " - Cover",
+			title + " poster",
+			title + " cover",
+		}
+	}
+	if len(season) == 0 {
+		return nil
+	}
+	number := season[0]
+	var tokenBases []string
+	if number == 0 {
+		tokenBases = []string{"Specials", "Special", "SP", "Season 0", "Season 00", "S00"}
+	} else {
+		tokenBases = []string{
+			fmt.Sprintf("Season %d", number),
+			fmt.Sprintf("Season %02d", number),
+			fmt.Sprintf("S%02d", number),
+			fmt.Sprintf("S%d", number),
+			fmt.Sprintf("Staffel %d", number),
+			fmt.Sprintf("Staffel %02d", number),
+		}
+	}
+	bases := make([]string, 0, len(tokenBases))
+	for _, token := range tokenBases {
+		bases = append(bases, title+" - "+token)
+	}
+	return bases
+}
+
+func seasonCoverBases(season int) []string {
+	if season == 0 {
+		return []string{
+			"season00-poster",
+			"season0-poster",
+			"s00-poster",
+			"s0-poster",
+			"specials-poster",
+			"special-poster",
+			"specials",
+			"special",
+			"sp",
+		}
+	}
+	return []string{
+		fmt.Sprintf("season%02d-poster", season),
+		fmt.Sprintf("season%d-poster", season),
+		fmt.Sprintf("season%02d-cover", season),
+		fmt.Sprintf("season%d-cover", season),
+		fmt.Sprintf("s%02d-poster", season),
+		fmt.Sprintf("s%d-poster", season),
+		fmt.Sprintf("s%02d-cover", season),
+		fmt.Sprintf("s%d-cover", season),
+		fmt.Sprintf("season %02d", season),
+		fmt.Sprintf("season %d", season),
+		fmt.Sprintf("s%02d", season),
+		fmt.Sprintf("s%d", season),
+	}
+}
+
+func coverCandidatesForBases(bases ...string) []string {
+	seen := make(map[string]bool)
+	var candidates []string
+	for _, base := range bases {
+		base = strings.TrimSpace(base)
+		if base == "" {
+			continue
+		}
+		for _, candidate := range coverNameCandidates(base) {
+			key := strings.ToLower(candidate)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			candidates = append(candidates, candidate)
+		}
+	}
+	return candidates
+}
+
+func parsedMainCoverMatcher(title string) func(string) bool {
+	return func(name string) bool {
+		parsed, err := cover.ParseCoverFile(name)
+		if err != nil || parsed.IsSeason {
+			return false
+		}
+		return parsedTitleMatches(title, parsed)
+	}
+}
+
+func parsedSeasonCoverMatcher(title string, season int) func(string) bool {
+	return func(name string) bool {
+		parsed, err := cover.ParseCoverFile(name)
+		if err != nil || !parsed.IsSeason || parsed.SeasonNumber != season {
+			return false
+		}
+		return parsedTitleMatches(title, parsed)
+	}
+}
+
+func parsedTitleMatches(title string, parsed cover.ParsedCover) bool {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return false
+	}
+	titleYear := extractYear(title)
+	if titleYear != "" && parsed.Year != "" && titleYear != parsed.Year {
+		return false
+	}
+	return cover.NormalizeTitle(parsed.Title) == cover.NormalizeTitle(title)
+}
+
+func applyCoverMatch(slot *models.CoverSlot, match coverMatch) {
+	slot.ExistingPath = match.path
+	slot.Exists = match.found
+	slot.SizeBytes = match.size
+	slot.NamingOK = true
+	slot.NamingHint = ""
+	if match.found && !match.exact {
+		slot.NamingOK = false
+		slot.NamingHint = fmt.Sprintf("Erkannt als %s, Zielname: %s", filepath.Base(match.path), filepath.Base(slot.TargetPath))
+	}
 }
 
 func checkSlotOptimization(slot *models.CoverSlot, cfg models.AppConfig) {
@@ -451,10 +613,10 @@ func formatSize(size int64) string {
 	return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 }
 
-func findExistingCover(dir string, candidates []string) (string, int64, bool) {
+func findExistingCover(dir string, exactCandidates, smartCandidates []string, smartMatcher func(string) bool) coverMatch {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", 0, false
+		return coverMatch{}
 	}
 	found := make(map[string]os.DirEntry, len(entries))
 	for _, entry := range entries {
@@ -463,18 +625,70 @@ func findExistingCover(dir string, candidates []string) (string, int64, bool) {
 		}
 		found[strings.ToLower(entry.Name())] = entry
 	}
-	for _, candidate := range candidates {
+	for _, candidate := range exactCandidates {
 		entry, ok := found[strings.ToLower(candidate)]
 		if !ok {
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return filepath.Join(dir, entry.Name()), 0, true
-		}
-		return filepath.Join(dir, entry.Name()), info.Size(), true
+		return coverMatchForEntry(dir, entry, true)
 	}
-	return "", 0, false
+	exactNames := make(map[string]bool, len(exactCandidates))
+	for _, candidate := range exactCandidates {
+		exactNames[strings.ToLower(candidate)] = true
+	}
+	for _, candidate := range smartCandidates {
+		key := strings.ToLower(candidate)
+		if exactNames[key] {
+			continue
+		}
+		entry, ok := found[key]
+		if !ok {
+			continue
+		}
+		return coverMatchForEntry(dir, entry, false)
+	}
+	if smartMatcher != nil {
+		sort.SliceStable(entries, func(i, j int) bool {
+			return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+		})
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			key := strings.ToLower(entry.Name())
+			if exactNames[key] || !isLocalCoverFile(entry.Name()) {
+				continue
+			}
+			if smartMatcher(entry.Name()) {
+				return coverMatchForEntry(dir, entry, false)
+			}
+		}
+	}
+	return coverMatch{}
+}
+
+func coverMatchForEntry(dir string, entry os.DirEntry, exact bool) coverMatch {
+	info, err := entry.Info()
+	size := int64(0)
+	if err == nil {
+		size = info.Size()
+	}
+	return coverMatch{
+		path:  filepath.Join(dir, entry.Name()),
+		size:  size,
+		found: true,
+		exact: exact,
+	}
+}
+
+func isLocalCoverFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	for _, coverExt := range localCoverExtensions {
+		if ext == coverExt {
+			return true
+		}
+	}
+	return false
 }
 
 func containsVideoFile(dir string) bool {

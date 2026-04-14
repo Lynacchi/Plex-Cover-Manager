@@ -130,6 +130,64 @@ func TestJellyfinFlatSeriesKeepsPlexSeasonPosterName(t *testing.T) {
 	}
 }
 
+func TestScanDetectsSmartMainCoverAlias(t *testing.T) {
+	root := t.TempDir()
+	movieDir := filepath.Join(root, "Example Movie (2020)")
+	mustMkdir(t, movieDir)
+	mustWrite(t, filepath.Join(movieDir, "Example.Movie.2020.mkv"))
+	mustWrite(t, filepath.Join(movieDir, "folder.jpg"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeMovie}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	slot := items[0].CoverSlots[0]
+	if !slot.Exists {
+		t.Fatalf("smart cover alias not detected: %#v", slot)
+	}
+	if slot.NamingOK || !strings.Contains(slot.NamingHint, "folder.jpg") {
+		t.Fatalf("naming state = ok %v, hint %q", slot.NamingOK, slot.NamingHint)
+	}
+	if items[0].Status != models.CoverStatusComplete {
+		t.Fatalf("status = %q, want complete", items[0].Status)
+	}
+}
+
+func TestScanDetectsDownloadedFlatSeasonCover(t *testing.T) {
+	root := t.TempDir()
+	showDir := filepath.Join(root, "Example Show (2024)")
+	mustMkdir(t, showDir)
+	mustWrite(t, filepath.Join(showDir, "Example.Show.S01E01.mkv"))
+	mustWrite(t, filepath.Join(showDir, "Example Show (2024) - Season 1.png"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeSeries}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	var seasonSlot models.CoverSlot
+	for _, slot := range items[0].CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 1 {
+			seasonSlot = slot
+		}
+	}
+	if !seasonSlot.Exists {
+		t.Fatalf("downloaded season cover not detected: %#v", items[0].CoverSlots)
+	}
+	if seasonSlot.NamingOK || filepath.Base(seasonSlot.ExistingPath) != "Example Show (2024) - Season 1.png" {
+		t.Fatalf("season slot = %#v", seasonSlot)
+	}
+}
+
 func TestScanDetectsUnoptimizedWebPCover(t *testing.T) {
 	root := t.TempDir()
 	movieDir := filepath.Join(root, "Example Movie (2020)")

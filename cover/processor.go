@@ -138,7 +138,7 @@ func copyFile(sourcePath, targetPath string) (ProcessResult, error) {
 }
 
 // OptimizeCover compresses an existing cover to JPEG, backing up the original first.
-func OptimizeCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig) (ProcessResult, error) {
+func OptimizeCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig, normalizeName bool) (ProcessResult, error) {
 	if !slot.Exists || slot.ExistingPath == "" {
 		return ProcessResult{}, fmt.Errorf("kein Cover vorhanden")
 	}
@@ -151,14 +151,53 @@ func OptimizeCover(slot models.CoverSlot, itemTitle string, compression models.C
 	}
 	comp := compression
 	comp.Disabled = false
-	result, err := ProcessCover(slot.ExistingPath, slot.TargetPath, comp)
+	targetPath := slot.TargetPath
+	if !normalizeName {
+		targetPath = optimizedSiblingPath(slot.ExistingPath)
+	}
+	result, err := ProcessCover(slot.ExistingPath, targetPath, comp)
 	if err != nil {
 		return ProcessResult{}, err
 	}
-	if !samePath(slot.ExistingPath, slot.TargetPath) {
+	if !samePath(slot.ExistingPath, targetPath) {
 		_ = os.Remove(slot.ExistingPath)
 	}
 	return result, nil
+}
+
+// RenameCoverToTargetName moves a detected cover to the current server-mode naming without recompressing it.
+func RenameCoverToTargetName(slot models.CoverSlot) (string, error) {
+	if !slot.Exists || slot.ExistingPath == "" {
+		return "", fmt.Errorf("kein Cover vorhanden")
+	}
+	targetPath := targetPathWithExistingExtension(slot)
+	if samePath(slot.ExistingPath, targetPath) {
+		return targetPath, nil
+	}
+	if _, err := os.Stat(targetPath); err == nil {
+		return "", fmt.Errorf("Zieldatei existiert bereits: %s", targetPath)
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.Rename(slot.ExistingPath, targetPath); err != nil {
+		return "", err
+	}
+	return targetPath, nil
+}
+
+func optimizedSiblingPath(path string) string {
+	return strings.TrimSuffix(path, filepath.Ext(path)) + ".jpg"
+}
+
+func targetPathWithExistingExtension(slot models.CoverSlot) string {
+	ext := strings.ToLower(filepath.Ext(slot.ExistingPath))
+	if ext == "" {
+		ext = filepath.Ext(slot.TargetPath)
+	}
+	return strings.TrimSuffix(slot.TargetPath, filepath.Ext(slot.TargetPath)) + ext
 }
 
 // OriginalBackupDir returns the directory next to the executable for storing originals.

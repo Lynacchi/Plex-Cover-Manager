@@ -141,3 +141,80 @@ func TestOriginalBackupDirCanBeOverriddenByLauncher(t *testing.T) {
 		t.Fatalf("OriginalBackupDir() = %q, want %q", got, filepath.Clean(dir))
 	}
 }
+
+func TestOptimizeCoverCanPreserveSmartAliasName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PCM_ORIGINALS_DIR", filepath.Join(dir, "originals"))
+	source := filepath.Join(dir, "folder.png")
+	target := filepath.Join(dir, "poster.jpg")
+	writeTestPNG(t, source)
+
+	slot := models.CoverSlot{
+		Label:        "Main",
+		TargetPath:   target,
+		ExistingPath: source,
+		Exists:       true,
+		NamingOK:     false,
+	}
+	if _, err := OptimizeCover(slot, "Example Movie", models.CompressionConfig{JPEGQuality: 85, MaxWidth: 1000, MaxHeight: 1500}, false); err != nil {
+		t.Fatalf("OptimizeCover() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "folder.jpg")); err != nil {
+		t.Fatalf("optimized alias missing: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("unexpected canonical target at %s", target)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("unexpected original source at %s", source)
+	}
+}
+
+func TestRenameCoverToTargetNamePreservesExtension(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "folder.png")
+	target := filepath.Join(dir, "poster.jpg")
+	if err := os.WriteFile(source, []byte("cover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	slot := models.CoverSlot{
+		TargetPath:   target,
+		ExistingPath: source,
+		Exists:       true,
+	}
+
+	renamedPath, err := RenameCoverToTargetName(slot)
+	if err != nil {
+		t.Fatalf("RenameCoverToTargetName() error = %v", err)
+	}
+	if want := filepath.Join(dir, "poster.png"); renamedPath != want {
+		t.Fatalf("renamedPath = %q, want %q", renamedPath, want)
+	}
+	if _, err := os.Stat(renamedPath); err != nil {
+		t.Fatalf("renamed cover missing: %v", err)
+	}
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("unexpected source at %s", source)
+	}
+}
+
+func writeTestPNG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 64, 96))
+	for y := 0; y < 96; y++ {
+		for x := 0; x < 64; x++ {
+			img.Set(x, y, color.RGBA{R: 80, G: 120, B: 180, A: 255})
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, img); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}

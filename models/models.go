@@ -17,7 +17,7 @@ const (
 type ServerMode string
 
 const (
-	ServerModePlex    ServerMode = "plex"
+	ServerModePlex     ServerMode = "plex"
 	ServerModeJellyfin ServerMode = "jellyfin"
 )
 
@@ -64,6 +64,8 @@ type CoverSlot struct {
 	ExistingPath string
 	Exists       bool
 	SizeBytes    int64
+	NamingOK     bool
+	NamingHint   string
 	IsOptimized  bool
 	OptimizeHint string
 }

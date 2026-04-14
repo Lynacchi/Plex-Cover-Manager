@@ -9,21 +9,24 @@ Plex Cover Manager ist eine kleine Windows-Desktop-App zum Verwalten lokaler Ple
 - Batch-Import mehrerer Cover-Dateien
 - Preview vor jedem Schreibvorgang
 - Plex-konforme Dateinamen wie `poster.jpg` und `season01-poster.jpg`
-- Jellyfin-Modus mit `poster.jpg` in Staffelordnern
+- Jellyfin-Modus mit `poster.jpg` in Staffelordnern und `seasonXX-poster.jpg` als Flat-Fallback
 - JPEG-Komprimierung mit konfigurierbarer Qualitaet und Maximalaufloesung
 - optional deaktivierbare Komprimierung
 - Optimierungserkennung fuer zu grosse oder nicht als JPEG gespeicherte Cover
+- smarte Erkennung vorhandener Alias-Cover wie `folder.jpg`, `cover.jpg` oder heruntergeladene Staffelcover
+- optionales Umbenennen erkannter Alias-Cover auf den aktuellen Plex-/Jellyfin-Zielnamen
 - SMB-/UNC-Pfade wie `\\Server\Share\Media`
 - schnelle manuelle Pfadeingabe fuer Netzlaufwerke
+- gezieltes Drag & Drop auf einzelne Cover-Positionen in der Detailansicht
 
 ## Download
 
 Releases enthalten zwei Windows-EXEs:
 
-- `PlexCoverManager-v0.0.7.exe`
+- `PlexCoverManager-v0.1.0.exe`
   Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-- `PlexCoverManager-v0.0.7-portable.exe`
+- `PlexCoverManager-v0.1.0-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die App benoetigt keine Installation. Einfach die passende EXE starten.
