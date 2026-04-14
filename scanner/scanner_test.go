@@ -188,6 +188,33 @@ func TestScanDetectsDownloadedFlatSeasonCover(t *testing.T) {
 	}
 }
 
+func TestRescanItemOnlyReloadsSelectedItem(t *testing.T) {
+	root := t.TempDir()
+	movieDir := filepath.Join(root, "Example Movie (2020)")
+	mustMkdir(t, movieDir)
+	mustWrite(t, filepath.Join(movieDir, "Example.Movie.2020.mkv"))
+
+	item := models.MediaItem{
+		ID:          filepath.Clean(movieDir),
+		Title:       "Example Movie (2020)",
+		Type:        models.MediaTypeMovie,
+		LibraryPath: filepath.Clean(root),
+		Path:        filepath.Clean(movieDir),
+	}
+	mustWrite(t, filepath.Join(movieDir, "poster.jpg"))
+
+	rescanned, warnings := RescanItem(t.Context(), models.AppConfig{}, item)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if rescanned.ID != item.ID {
+		t.Fatalf("ID = %q, want %q", rescanned.ID, item.ID)
+	}
+	if rescanned.Status != models.CoverStatusComplete {
+		t.Fatalf("status = %q, want complete", rescanned.Status)
+	}
+}
+
 func TestScanDetectsUnoptimizedWebPCover(t *testing.T) {
 	root := t.TempDir()
 	movieDir := filepath.Join(root, "Example Movie (2020)")

@@ -29,11 +29,7 @@ func ApplyImportPlan(plan ImportPlan, compression models.CompressionConfig) (Pro
 	if !plan.CanApply {
 		return ProcessResult{}, fmt.Errorf("Import nicht anwendbar: %s", plan.Status)
 	}
-	targetPath := plan.TargetPath
-	if compression.Disabled {
-		sourceExt := strings.ToLower(filepath.Ext(plan.SourcePath))
-		targetPath = strings.TrimSuffix(targetPath, filepath.Ext(targetPath)) + sourceExt
-	}
+	targetPath := FinalImportTargetPath(plan, compression)
 	result, err := ProcessCover(plan.SourcePath, targetPath, compression)
 	if err != nil {
 		return ProcessResult{}, err
@@ -42,6 +38,15 @@ func ApplyImportPlan(plan ImportPlan, compression models.CompressionConfig) (Pro
 		_ = os.Remove(plan.ExistingPath)
 	}
 	return result, nil
+}
+
+func FinalImportTargetPath(plan ImportPlan, compression models.CompressionConfig) string {
+	targetPath := plan.TargetPath
+	if compression.Disabled && targetPath != "" {
+		sourceExt := strings.ToLower(filepath.Ext(plan.SourcePath))
+		targetPath = strings.TrimSuffix(targetPath, filepath.Ext(targetPath)) + sourceExt
+	}
+	return targetPath
 }
 
 func ProcessCover(sourcePath, targetPath string, compression models.CompressionConfig) (ProcessResult, error) {
@@ -137,8 +142,8 @@ func copyFile(sourcePath, targetPath string) (ProcessResult, error) {
 	return ProcessResult{SizeBytes: info.Size()}, nil
 }
 
-// OptimizeCover compresses an existing cover to JPEG, backing up the original first.
-func OptimizeCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig, normalizeName bool) (ProcessResult, error) {
+// CompressCover compresses an existing cover to JPEG, backing up the original first.
+func CompressCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig, normalizeName bool) (ProcessResult, error) {
 	if !slot.Exists || slot.ExistingPath == "" {
 		return ProcessResult{}, fmt.Errorf("kein Cover vorhanden")
 	}
@@ -170,7 +175,7 @@ func RenameCoverToTargetName(slot models.CoverSlot) (string, error) {
 	if !slot.Exists || slot.ExistingPath == "" {
 		return "", fmt.Errorf("kein Cover vorhanden")
 	}
-	targetPath := targetPathWithExistingExtension(slot)
+	targetPath := RenameTargetPath(slot)
 	if samePath(slot.ExistingPath, targetPath) {
 		return targetPath, nil
 	}
@@ -186,6 +191,10 @@ func RenameCoverToTargetName(slot models.CoverSlot) (string, error) {
 		return "", err
 	}
 	return targetPath, nil
+}
+
+func RenameTargetPath(slot models.CoverSlot) string {
+	return targetPathWithExistingExtension(slot)
 }
 
 func optimizedSiblingPath(path string) string {

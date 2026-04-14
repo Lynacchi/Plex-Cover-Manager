@@ -56,3 +56,28 @@ func TestPlanImportsRejectsMissingSeason(t *testing.T) {
 		t.Fatalf("Status = %q, want %q", plan.Status, ImportStatusSeasonMissing)
 	}
 }
+
+func TestPlanForSlotUsesManualStatus(t *testing.T) {
+	item := models.MediaItem{
+		ID:    `C:\Media\Movies\365 Days to the Wedding`,
+		Title: "365 Days to the Wedding",
+		Type:  models.MediaTypeSeries,
+	}
+	slot := models.CoverSlot{
+		Key:        models.MainSlotKey(),
+		Label:      "Main",
+		Kind:       models.CoverKindMain,
+		TargetPath: filepath.Join(`C:\Media\Movies\365 Days to the Wedding`, "poster.jpg"),
+	}
+
+	plan := PlanForSlot(`C:\covers\100 METERS (2025).png`, item, slot)
+	if !plan.CanApply {
+		t.Fatalf("plan not applicable: %#v", plan)
+	}
+	if plan.Status != ImportStatusTargeted {
+		t.Fatalf("Status = %q, want %q", plan.Status, ImportStatusTargeted)
+	}
+	if plan.MatchedScore != 0 {
+		t.Fatalf("MatchedScore = %f, want 0", plan.MatchedScore)
+	}
+}

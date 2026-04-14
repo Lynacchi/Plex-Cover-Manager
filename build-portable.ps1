@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
@@ -36,7 +36,7 @@ $env:CGO_ENABLED = "1"
 
 $appVersion = (Get-Content (Join-Path $root "VERSION") -Raw).Trim()
 if ($appVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-    Write-Error "VERSION muss semantisch aussehen, z.B. 0.1.0. Aktuell: $appVersion"
+    Write-Error "VERSION muss semantisch aussehen, z.B. 0.2.0. Aktuell: $appVersion"
 }
 
 go run .\tools\icongen

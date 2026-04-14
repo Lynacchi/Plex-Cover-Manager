@@ -81,6 +81,33 @@ func ScanLibrary(ctx context.Context, cfg models.AppConfig) ([]models.MediaItem,
 	return items, warnings
 }
 
+func RescanItem(ctx context.Context, cfg models.AppConfig, item models.MediaItem) (models.MediaItem, []models.ScanWarning) {
+	cfg.Normalize()
+	if ctx.Err() != nil {
+		return models.MediaItem{}, nil
+	}
+	if item.Type == models.MediaTypeMovie {
+		if item.MediaFilePath != "" {
+			if _, err := os.Stat(item.MediaFilePath); err != nil {
+				return models.MediaItem{}, []models.ScanWarning{{Path: item.MediaFilePath, Message: err.Error()}}
+			}
+			return scanFlatMovie(item.LibraryPath, item.MediaFilePath, filepath.Base(item.MediaFilePath), cfg), nil
+		}
+		if _, err := os.Stat(item.Path); err != nil {
+			return models.MediaItem{}, []models.ScanWarning{{Path: item.Path, Message: err.Error()}}
+		}
+		return scanMovieFolder(item.LibraryPath, item.Path, filepath.Base(item.Path), cfg), nil
+	}
+	if _, err := os.Stat(item.Path); err != nil {
+		return models.MediaItem{}, []models.ScanWarning{{Path: item.Path, Message: err.Error()}}
+	}
+	rescanned, err := scanSeriesItem(item.LibraryPath, item.Path, filepath.Base(item.Path), cfg)
+	if err != nil {
+		return models.MediaItem{}, []models.ScanWarning{{Path: item.Path, Message: err.Error()}}
+	}
+	return rescanned, nil
+}
+
 func scanSeriesPath(ctx context.Context, root string, cfg models.AppConfig) ([]models.MediaItem, []models.ScanWarning) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -579,7 +606,7 @@ func applyCoverMatch(slot *models.CoverSlot, match coverMatch) {
 	slot.NamingHint = ""
 	if match.found && !match.exact {
 		slot.NamingOK = false
-		slot.NamingHint = fmt.Sprintf("Erkannt als %s, Zielname: %s", filepath.Base(match.path), filepath.Base(slot.TargetPath))
+		slot.NamingHint = fmt.Sprintf("Erkannt als %s, Zielname: %s", filepath.Base(match.path), filepath.Base(cover.RenameTargetPath(*slot)))
 	}
 }
 

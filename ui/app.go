@@ -33,10 +33,13 @@ import (
 )
 
 const (
-	filterAll      = "Alle"
-	filterMissing  = "Nur fehlende Cover"
-	filterComplete = "Nur vollständige"
-	filterPartial  = "Nur teilweise"
+	filterAll        = "Alle"
+	filterMissing    = "Fehlende Cover"
+	filterComplete   = "Cover vollständig"
+	filterPartial    = "Cover teilweise"
+	typeFilterAll    = "Alle"
+	typeFilterMovies = "Filme"
+	typeFilterSeries = "Serien"
 )
 
 var (
@@ -62,7 +65,7 @@ type Application struct {
 	filtered []models.MediaItem
 
 	searchText      string
-	sortAsc         bool
+	typeFilter      string
 	statusFilter    string
 	statusLabel     *widget.Label
 	list            *widget.List
@@ -126,6 +129,9 @@ func (s *statusIndicator) MouseIn(event *desktop.MouseEvent) {
 	if event == nil {
 		return
 	}
+	if s.popup != nil {
+		return
+	}
 	s.hovering = true
 	s.lastPos = event.AbsolutePosition
 	if s.timer != nil {
@@ -151,9 +157,7 @@ func (s *statusIndicator) MouseIn(event *desktop.MouseEvent) {
 }
 
 func (s *statusIndicator) MouseMoved(event *desktop.MouseEvent) {
-	if event != nil && s.popup == nil {
-		s.lastPos = event.AbsolutePosition
-	}
+	// Tooltips stay fixed at their first position until the pointer leaves the dot.
 }
 
 func (s *statusIndicator) MouseOut() {
@@ -182,7 +186,7 @@ func NewApplication(configManager *config.Manager) *Application {
 		app:          fyneApp,
 		window:       window,
 		config:       configManager,
-		sortAsc:      true,
+		typeFilter:   typeFilterAll,
 		statusFilter: filterAll,
 	}
 }
@@ -221,6 +225,10 @@ func (a *Application) handleFileDrop(pos fyne.Position, uris []fyne.URI) {
 			return
 		}
 		if slot, ok := a.detailSlotAt(pos); ok {
+			if len(paths) > 1 {
+				dialog.ShowInformation("Eine Datei pro Position", "Lege auf eine konkrete Cover-Position bitte nur eine Datei ab. Für mehrere Dateien nutze die automatische Zuordnung.", a.window)
+				return
+			}
 			plan := cover.PlanForSlot(paths[0], item, slot)
 			title := "Cover hinzufügen (Drag & Drop)"
 			if slot.Exists {
@@ -232,7 +240,7 @@ func (a *Application) handleFileDrop(pos fyne.Position, uris []fyne.URI) {
 			return
 		}
 		plans := cover.PlanImportsForItem(paths, item)
-		a.showImportPreview("Cover hinzufügen (Drag & Drop)", plans, func() {
+		a.showImportPreview("Cover automatisch zuordnen (Drag & Drop)", plans, func() {
 			a.showDetail(detailID)
 		})
 	} else {
@@ -276,15 +284,17 @@ func (a *Application) showMainList() {
 		a.applyFilters()
 	}
 
-	sortSelect := widget.NewSelect([]string{"A-Z", "Z-A"}, func(value string) {
-		a.sortAsc = value != "Z-A"
+	typeSelect := widget.NewSelect([]string{typeFilterAll, typeFilterMovies, typeFilterSeries}, func(value string) {
+		if value == "" {
+			value = typeFilterAll
+		}
+		a.typeFilter = value
 		a.applyFilters()
 	})
-	if a.sortAsc {
-		sortSelect.SetSelected("A-Z")
-	} else {
-		sortSelect.SetSelected("Z-A")
+	if a.typeFilter == "" {
+		a.typeFilter = typeFilterAll
 	}
+	typeSelect.SetSelected(a.typeFilter)
 
 	filterSelect := widget.NewSelect([]string{filterAll, filterMissing, filterComplete, filterPartial}, func(value string) {
 		if value == "" {
@@ -295,13 +305,13 @@ func (a *Application) showMainList() {
 	})
 	filterSelect.SetSelected(a.statusFilter)
 
-	rescanButton := widget.NewButton("Rescan", func() {
+	rescanButton := widget.NewButton("Neu scannen", func() {
 		a.refreshData("Scan läuft ...", nil)
 	})
 	batchButton := widget.NewButton("Batch-Import", a.startBatchImport)
 	settingsButton := widget.NewButton("Einstellungen", a.showSettings)
 
-	topLine := container.NewBorder(nil, nil, title, container.NewHBox(sortSelect, filterSelect, rescanButton, batchButton, settingsButton), search)
+	topLine := container.NewBorder(nil, nil, title, container.NewHBox(typeSelect, filterSelect, rescanButton, batchButton, settingsButton), search)
 	a.statusLabel = widget.NewLabel("Bereit")
 
 	a.list = widget.NewList(
@@ -362,6 +372,16 @@ func (a *Application) applyFilters() {
 		if query != "" && !strings.Contains(strings.ToLower(item.Title), query) {
 			continue
 		}
+		switch a.typeFilter {
+		case typeFilterMovies:
+			if item.Type != models.MediaTypeMovie {
+				continue
+			}
+		case typeFilterSeries:
+			if item.Type != models.MediaTypeSeries {
+				continue
+			}
+		}
 		switch a.statusFilter {
 		case filterMissing:
 			if item.Status != models.CoverStatusNone {
@@ -383,10 +403,7 @@ func (a *Application) applyFilters() {
 		if left == right {
 			return filtered[i].Path < filtered[j].Path
 		}
-		if a.sortAsc {
-			return left < right
-		}
-		return left > right
+		return left < right
 	})
 	a.filtered = filtered
 	a.mu.Unlock()
@@ -448,6 +465,46 @@ func (a *Application) refreshData(message string, after func()) {
 	}()
 }
 
+func (a *Application) refreshDetailItem(itemID string) {
+	item, ok := a.findItem(itemID)
+	if !ok {
+		dialog.ShowInformation("Titel nicht gefunden", "Der Titel ist nach dem letzten Scan nicht mehr vorhanden.", a.window)
+		return
+	}
+	cfg := a.config.Get()
+	go func() {
+		refreshed, warnings := scanner.RescanItem(context.Background(), cfg, item)
+		fyne.Do(func() {
+			if refreshed.ID == "" {
+				if len(warnings) > 0 {
+					dialog.ShowInformation("Aktualisieren", scanWarningText(warnings), a.window)
+				} else {
+					dialog.ShowInformation("Aktualisieren", "Der Titel konnte nicht neu geladen werden.", a.window)
+				}
+				return
+			}
+			a.mu.Lock()
+			replaced := false
+			for i := range a.items {
+				if a.items[i].ID == itemID {
+					a.items[i] = refreshed
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				a.items = append(a.items, refreshed)
+			}
+			a.mu.Unlock()
+			a.applyFilters()
+			if len(warnings) > 0 {
+				dialog.ShowInformation("Aktualisieren", scanWarningText(warnings), a.window)
+			}
+			a.showDetail(refreshed.ID)
+		})
+	}()
+}
+
 func scanWarningText(warnings []models.ScanWarning) string {
 	const maxShown = 8
 	lines := make([]string, 0, len(warnings)+1)
@@ -476,7 +533,10 @@ func (a *Application) showDetail(itemID string) {
 	title.Truncation = fyne.TextTruncateEllipsis
 	typeLabel := widget.NewLabel(item.TypeLabel())
 	headerLine := container.NewBorder(nil, nil, container.NewHBox(newStatusIndicator(visualStatusForItem(item)), typeLabel), nil, title)
-	header := container.NewBorder(nil, nil, backButton, nil, headerLine)
+	refreshButton := widget.NewButton("Neu laden", func() {
+		a.refreshDetailItem(item.ID)
+	})
+	header := container.NewBorder(nil, nil, backButton, refreshButton, headerLine)
 
 	structure := widget.NewLabel(itemStructureText(item, cfg.ServerMode))
 	structure.Wrapping = fyne.TextWrapWord
@@ -484,12 +544,12 @@ func (a *Application) showDetail(itemID string) {
 	slotRows := container.NewVBox()
 	for _, slot := range item.SortedSlots() {
 		slotCopy := slot
-		row := a.coverSlotRow(item, slotCopy, cfg.ServerMode)
+		row := a.coverSlotRow(item, slotCopy, cfg)
 		a.detailDropSlots = append(a.detailDropSlots, detailDropSlot{itemID: item.ID, slot: slotCopy, object: row})
 		slotRows.Add(row)
 	}
 
-	addButton := widget.NewButton("Cover hinzufügen", func() {
+	addButton := widget.NewButton("Mehrere Cover automatisch zuordnen", func() {
 		a.selectAndPreviewForItem(item.ID)
 	})
 	pathLabel := widget.NewLabel(fmt.Sprintf("Pfad: %s", displayItemPath(item)))
@@ -512,20 +572,22 @@ func (a *Application) showDetail(itemID string) {
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
 }
 
-func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot, mode models.ServerMode) fyne.CanvasObject {
+func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot, cfg models.AppConfig) fyne.CanvasObject {
 	preview := slotPreview(slot)
-	targetName := targetDisplayName(item, slot, mode)
+	targetName := targetDisplayName(item, slot, cfg.ServerMode)
 	infoText := fmt.Sprintf("%s\nZiel: %s\nStatus: Fehlt", slot.Label, targetName)
 	if slot.Exists {
-		optStatus := "Optimiert"
-		if !slot.IsOptimized && slot.OptimizeHint != "" {
-			optStatus = slot.OptimizeHint
+		compressionStatus := "OK"
+		if cfg.Compression.Disabled {
+			compressionStatus = "Deaktiviert"
+		} else if !slot.IsOptimized && slot.OptimizeHint != "" {
+			compressionStatus = slot.OptimizeHint
 		}
 		namingStatus := "Korrekt"
 		if !slot.NamingOK && slot.NamingHint != "" {
 			namingStatus = slot.NamingHint
 		}
-		infoText = fmt.Sprintf("%s\nDatei: %s\nGröße: %s\nStatus: Vorhanden\nBenennung: %s\nOptimierung: %s", slot.Label, filepath.Base(slot.ExistingPath), formatBytes(slot.SizeBytes), namingStatus, optStatus)
+		infoText = fmt.Sprintf("%s\nDatei: %s\nGröße: %s\nStatus: Vorhanden\nBenennung: %s\nKomprimierung: %s", slot.Label, filepath.Base(slot.ExistingPath), formatBytes(slot.SizeBytes), namingStatus, compressionStatus)
 	}
 	info := widget.NewLabel(infoText)
 	info.Wrapping = fyne.TextWrapWord
@@ -554,31 +616,39 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot,
 	slotCopy := slot
 	itemID := item.ID
 	itemTitle := item.Title
-	optimizeButton := widget.NewButton("Optimieren", func() {
-		a.optimizeSingleCover(itemID, itemTitle, slotCopy)
+	compressButton := widget.NewButton("Komprimieren", func() {
+		a.compressSingleCover(itemID, itemTitle, slotCopy)
 	})
-	if !slot.Exists || slot.IsOptimized {
-		optimizeButton.Disable()
+	if cfg.Compression.Disabled || !slot.Exists || slot.IsOptimized {
+		compressButton.Disable()
 	}
-	actions := container.NewVBox(replaceButton, deleteButton, renameButton, optimizeButton)
+	actionButtons := []fyne.CanvasObject{replaceButton, deleteButton, renameButton}
+	if !cfg.Compression.Disabled {
+		actionButtons = append(actionButtons, compressButton)
+	}
+	actions := container.NewVBox(actionButtons...)
 	return container.New(layout.NewCustomPaddedLayout(4, 4, 4, 4), container.NewBorder(nil, nil, preview, actions, info))
 }
 
-func (a *Application) optimizeSingleCover(itemID, itemTitle string, slot models.CoverSlot) {
+func (a *Application) compressSingleCover(itemID, itemTitle string, slot models.CoverSlot) {
 	cfg := a.config.Get()
+	if cfg.Compression.Disabled {
+		dialog.ShowInformation("Komprimierung deaktiviert", "Aktiviere die Komprimierung in den Einstellungen, um Cover zu komprimieren.", a.window)
+		return
+	}
 	normalizeName := slot.NamingOK
 	go func() {
-		_, err := cover.OptimizeCover(slot, itemTitle, cfg.Compression, normalizeName)
+		_, err := cover.CompressCover(slot, itemTitle, cfg.Compression, normalizeName)
 		fyne.Do(func() {
 			if err != nil {
 				dialog.ShowError(err, a.window)
 				return
 			}
-			msg := fmt.Sprintf("%s wurde optimiert. Original gesichert.", slot.Label)
+			msg := fmt.Sprintf("%s wurde komprimiert. Original gesichert.", slot.Label)
 			if !normalizeName {
 				msg += "\n\nDer erkannte Aliasname wurde beibehalten. Nutze \"Umbenennen\", um auf den Zielnamen zu wechseln."
 			}
-			dialog.ShowInformation("Optimierung", msg, a.window)
+			dialog.ShowInformation("Komprimierung", msg, a.window)
 			a.refreshData("Scan läuft ...", func() { a.showDetail(itemID) })
 		})
 	}()
@@ -588,8 +658,13 @@ func (a *Application) confirmRenameCover(itemID string, slot models.CoverSlot) {
 	if !slot.Exists || slot.ExistingPath == "" {
 		return
 	}
+	targetPath := cover.RenameTargetPath(slot)
+	ext := filepath.Ext(slot.ExistingPath)
+	if ext == "" {
+		ext = filepath.Ext(targetPath)
+	}
 	dialog.NewConfirm("Cover umbenennen",
-		fmt.Sprintf("%s wird auf den Zielnamen umbenannt.\n\nVon: %s\nNach: %s\n\nDas Bild wird dabei nicht komprimiert.", slot.Label, filepath.Base(slot.ExistingPath), filepath.Base(slot.TargetPath)),
+		fmt.Sprintf("%s wird auf den Zielnamen umbenannt.\n\nVon: %s\nNach: %s\n\nNur der Dateiname wird geändert. Das Format bleibt %s.", slot.Label, filepath.Base(slot.ExistingPath), filepath.Base(targetPath), ext),
 		func(ok bool) {
 			if !ok {
 				return
@@ -675,7 +750,7 @@ func (a *Application) selectAndPreviewForItem(itemID string) {
 				return
 			}
 			plans := cover.PlanImportsForItem(paths, item)
-			a.showImportPreview("Cover hinzufügen", plans, func() {
+			a.showImportPreview("Cover automatisch zuordnen", plans, func() {
 				a.showDetail(itemID)
 			})
 		})
@@ -703,18 +778,19 @@ func (a *Application) startBatchImport() {
 }
 
 func (a *Application) showImportPreview(title string, plans []cover.ImportPlan, after func()) {
+	cfg := a.config.Get()
 	applyCount := 0
 	for _, plan := range plans {
 		if plan.CanApply {
 			applyCount++
 		}
 	}
-	summary := widget.NewLabel(fmt.Sprintf("%d Datei(en), %d werden übernommen.", len(plans), applyCount))
+	summary := widget.NewLabel(fmt.Sprintf("%d Datei(en) ausgewählt, %d werden übernommen.", len(plans), applyCount))
 	summary.Wrapping = fyne.TextWrapWord
 
 	rows := container.NewVBox()
 	for _, plan := range plans {
-		label := widget.NewLabel(previewText(plan))
+		label := widget.NewLabel(previewText(plan, cfg.Compression))
 		label.Wrapping = fyne.TextWrapWord
 		label.Selectable = true
 		rows.Add(label)
@@ -734,7 +810,7 @@ func (a *Application) showImportPreview(title string, plans []cover.ImportPlan, 
 	confirm.Show()
 }
 
-func previewText(plan cover.ImportPlan) string {
+func previewText(plan cover.ImportPlan, compression models.CompressionConfig) string {
 	icon := "[FEHLER]"
 	if plan.CanApply {
 		icon = "[OK]"
@@ -742,7 +818,7 @@ func previewText(plan cover.ImportPlan) string {
 	if plan.Overwrites {
 		icon = "[WARNUNG]"
 	}
-	target := plan.TargetPath
+	target := cover.FinalImportTargetPath(plan, compression)
 	if target == "" {
 		target = "-"
 	}
@@ -754,7 +830,7 @@ func previewText(plan cover.ImportPlan) string {
 	if slot == "" {
 		slot = "-"
 	}
-	return fmt.Sprintf("%s %s\nTitel: %s | Slot: %s | Status: %s\nZiel: %s\n%s",
+	return fmt.Sprintf("%s %s\nTitel: %s\nPosition: %s\nAktion: %s\nZiel: %s\n%s",
 		icon, plan.SourceFile, title, slot, plan.Status, target, plan.Message)
 }
 
@@ -877,31 +953,36 @@ func (a *Application) showSettings() {
 		container.NewBorder(nil, nil, widget.NewLabel("Max. Breite"), nil, widthEntry),
 		container.NewBorder(nil, nil, widget.NewLabel("Max. Höhe"), nil, heightEntry),
 	))
-	compressionControls.Add(container.NewBorder(nil, nil, widget.NewLabel("Optimierungs-Schwellwert (KB)"), nil, thresholdEntry))
+	compressionControls.Add(container.NewBorder(nil, nil, widget.NewLabel("Komprimierungs-Schwellwert (KB)"), nil, thresholdEntry))
 
-	compressionCheck := widget.NewCheck("Komprimierung aktiviert", func(enabled bool) {
+	compressionCheck := widget.NewCheck("Komprimierung aktiviert", nil)
+	compressionCheck.SetChecked(!cfg.Compression.Disabled)
+	compressionCheck.OnChanged = func(enabled bool) {
 		a.saveConfig(func(cfg *models.AppConfig) {
 			cfg.Compression.Disabled = !enabled
 		})
-		if enabled {
-			compressionControls.Show()
-		} else {
-			compressionControls.Hide()
-		}
-	})
-	compressionCheck.SetChecked(!cfg.Compression.Disabled)
+		a.showSettings()
+	}
 	if cfg.Compression.Disabled {
 		compressionControls.Hide()
 	}
 
-	// --- Batch optimization ---
-	unoptimizedCount := a.countUnoptimizedCovers()
-	optimizeLabel := widget.NewLabel(fmt.Sprintf("%d Cover können optimiert werden.", unoptimizedCount))
-	batchOptimizeButton := widget.NewButton("Alle optimieren", func() {
-		a.batchOptimize()
-	})
-	if unoptimizedCount == 0 {
-		batchOptimizeButton.Disable()
+	compressionBatchBox := container.NewVBox()
+	if cfg.Compression.Disabled {
+		info := widget.NewLabel("Komprimierung ist deaktiviert. Imports werden unverändert kopiert; bestehende Cover können hier nicht komprimiert werden.")
+		info.Wrapping = fyne.TextWrapWord
+		compressionBatchBox.Add(info)
+	} else {
+		uncompressedCount := a.countCompressibleCovers()
+		compressLabel := widget.NewLabel(fmt.Sprintf("%d Cover können komprimiert werden.", uncompressedCount))
+		batchCompressButton := widget.NewButton("Alle komprimieren", func() {
+			a.batchCompress()
+		})
+		if uncompressedCount == 0 {
+			batchCompressButton.Disable()
+		}
+		compressionBatchBox.Add(compressLabel)
+		compressionBatchBox.Add(batchCompressButton)
 	}
 
 	// --- Config file ---
@@ -931,10 +1012,7 @@ func (a *Application) showSettings() {
 		widget.NewLabelWithStyle("Komprimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		compressionCheck,
 		compressionControls,
-		widget.NewSeparator(),
-		widget.NewLabelWithStyle("Optimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		optimizeLabel,
-		batchOptimizeButton,
+		compressionBatchBox,
 		widget.NewSeparator(),
 		configRow,
 	)
@@ -994,7 +1072,7 @@ func (a *Application) confirmModeSwitch(newMode models.ServerMode) {
 	modeDialog.Show()
 }
 
-func (a *Application) countUnoptimizedCovers() int {
+func (a *Application) countCompressibleCovers() int {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	count := 0
@@ -1008,50 +1086,54 @@ func (a *Application) countUnoptimizedCovers() int {
 	return count
 }
 
-func (a *Application) batchOptimize() {
+func (a *Application) batchCompress() {
+	cfg := a.config.Get()
+	if cfg.Compression.Disabled {
+		dialog.ShowInformation("Komprimierung deaktiviert", "Aktiviere die Komprimierung in den Einstellungen, um bestehende Cover zu komprimieren.", a.window)
+		return
+	}
 	a.mu.RLock()
-	type optimizeJob struct {
+	type compressJob struct {
 		itemTitle string
 		slot      models.CoverSlot
 	}
-	var jobs []optimizeJob
+	var jobs []compressJob
 	for _, item := range a.items {
 		for _, slot := range item.CoverSlots {
 			if slot.Exists && !slot.IsOptimized {
-				jobs = append(jobs, optimizeJob{itemTitle: item.Title, slot: slot})
+				jobs = append(jobs, compressJob{itemTitle: item.Title, slot: slot})
 			}
 		}
 	}
 	a.mu.RUnlock()
 
 	if len(jobs) == 0 {
-		dialog.ShowInformation("Optimierung", "Keine Cover zum Optimieren gefunden.", a.window)
+		dialog.ShowInformation("Komprimierung", "Keine Cover zum Komprimieren gefunden.", a.window)
 		return
 	}
 
-	cfg := a.config.Get()
-	dialog.NewConfirm("Batch-Optimierung",
-		fmt.Sprintf("%d Cover werden optimiert. Originale werden gesichert.\nFortfahren?", len(jobs)),
+	dialog.NewConfirm("Batch-Komprimierung",
+		fmt.Sprintf("%d Cover werden komprimiert. Originale werden gesichert.\nFortfahren?", len(jobs)),
 		func(ok bool) {
 			if !ok {
 				return
 			}
 			go func() {
-				optimized := 0
+				compressed := 0
 				var failures []string
 				for _, job := range jobs {
-					if _, err := cover.OptimizeCover(job.slot, job.itemTitle, cfg.Compression, job.slot.NamingOK); err != nil {
+					if _, err := cover.CompressCover(job.slot, job.itemTitle, cfg.Compression, job.slot.NamingOK); err != nil {
 						failures = append(failures, fmt.Sprintf("%s (%s): %s", job.itemTitle, job.slot.Label, err.Error()))
 						continue
 					}
-					optimized++
+					compressed++
 				}
 				fyne.Do(func() {
-					msg := fmt.Sprintf("%d Cover optimiert.", optimized)
+					msg := fmt.Sprintf("%d Cover komprimiert.", compressed)
 					if len(failures) > 0 {
 						msg += fmt.Sprintf("\n\nFehler:\n%s", strings.Join(failures, "\n"))
 					}
-					dialog.ShowInformation("Batch-Optimierung", msg, a.window)
+					dialog.ShowInformation("Batch-Komprimierung", msg, a.window)
 					a.refreshData("Scan läuft ...", func() { a.showSettings() })
 				})
 			}()
@@ -1241,14 +1323,14 @@ func formatBytes(size int64) string {
 }
 
 func visualStatusForItem(item models.MediaItem) visualStatus {
-	return visualStatusForCover(item.Status, unoptimizedCoverCount(item), renameableCoverCount(item), item.StatusLabel())
+	return visualStatusForCover(item.Status, compressibleCoverCount(item), renameableCoverCount(item), item.StatusLabel())
 }
 
-func visualStatusForCover(status models.CoverStatus, optimizeCount, renameCount int, statusText string) visualStatus {
-	if optimizeCount > 0 || renameCount > 0 {
+func visualStatusForCover(status models.CoverStatus, compressCount, renameCount int, statusText string) visualStatus {
+	if compressCount > 0 || renameCount > 0 {
 		lines := []string{statusText}
-		if optimizeCount > 0 {
-			lines = append(lines, fmt.Sprintf("Optimierung verfügbar: %d Cover", optimizeCount))
+		if compressCount > 0 {
+			lines = append(lines, fmt.Sprintf("Komprimierung möglich: %d Cover", compressCount))
 		}
 		if renameCount > 0 {
 			lines = append(lines, fmt.Sprintf("Umbenennung möglich: %d Cover", renameCount))
@@ -1268,7 +1350,7 @@ func visualStatusForCover(status models.CoverStatus, optimizeCount, renameCount 
 	}
 }
 
-func unoptimizedCoverCount(item models.MediaItem) int {
+func compressibleCoverCount(item models.MediaItem) int {
 	count := 0
 	for _, slot := range item.CoverSlots {
 		if slot.Exists && !slot.IsOptimized {

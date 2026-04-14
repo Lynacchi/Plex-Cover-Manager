@@ -88,6 +88,18 @@ func TestApplyImportPlanDisabledCopiesSourceAndPreservesExtension(t *testing.T) 
 	}
 }
 
+func TestFinalImportTargetPathPreservesExtensionWhenCompressionDisabled(t *testing.T) {
+	plan := ImportPlan{
+		SourcePath: filepath.Join("covers", "source.webp"),
+		TargetPath: filepath.Join("media", "poster.jpg"),
+	}
+	got := FinalImportTargetPath(plan, models.CompressionConfig{Disabled: true})
+	want := filepath.Join("media", "poster.webp")
+	if got != want {
+		t.Fatalf("FinalImportTargetPath() = %q, want %q", got, want)
+	}
+}
+
 func TestRenameCoversForModeSwitch(t *testing.T) {
 	dir := t.TempDir()
 	seasonDir := filepath.Join(dir, "Season 01")
@@ -142,7 +154,7 @@ func TestOriginalBackupDirCanBeOverriddenByLauncher(t *testing.T) {
 	}
 }
 
-func TestOptimizeCoverCanPreserveSmartAliasName(t *testing.T) {
+func TestCompressCoverCanPreserveSmartAliasName(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PCM_ORIGINALS_DIR", filepath.Join(dir, "originals"))
 	source := filepath.Join(dir, "folder.png")
@@ -156,8 +168,8 @@ func TestOptimizeCoverCanPreserveSmartAliasName(t *testing.T) {
 		Exists:       true,
 		NamingOK:     false,
 	}
-	if _, err := OptimizeCover(slot, "Example Movie", models.CompressionConfig{JPEGQuality: 85, MaxWidth: 1000, MaxHeight: 1500}, false); err != nil {
-		t.Fatalf("OptimizeCover() error = %v", err)
+	if _, err := CompressCover(slot, "Example Movie", models.CompressionConfig{JPEGQuality: 85, MaxWidth: 1000, MaxHeight: 1500}, false); err != nil {
+		t.Fatalf("CompressCover() error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "folder.jpg")); err != nil {
 		t.Fatalf("optimized alias missing: %v", err)

@@ -13,8 +13,9 @@ import (
 type ImportStatus string
 
 const (
-	ImportStatusReady         ImportStatus = "Match gefunden"
-	ImportStatusOverwrite     ImportStatus = "Überschreibt bestehendes Cover"
+	ImportStatusReady         ImportStatus = "Automatisch zugeordnet"
+	ImportStatusTargeted      ImportStatus = "Manuell zugeordnet"
+	ImportStatusOverwrite     ImportStatus = "Bestehendes Cover wird ersetzt"
 	ImportStatusNoMatch       ImportStatus = "Kein Match gefunden"
 	ImportStatusSeasonMissing ImportStatus = "Staffelordner existiert nicht"
 	ImportStatusUnsupported   ImportStatus = "Nicht unterstütztes Format"
@@ -70,7 +71,7 @@ func PlanForSlot(path string, item models.MediaItem, slot models.CoverSlot) Impo
 	if err != nil {
 		return invalidPlan(path, ImportStatusUnsupported, err.Error())
 	}
-	return buildPlan(parsed, item, slot, 1)
+	return buildTargetedPlan(parsed, item, slot)
 }
 
 func planParsedImport(parsed ParsedCover, items []models.MediaItem, allowSingleCandidate bool) ImportPlan {
@@ -103,11 +104,11 @@ func planParsedImport(parsed ParsedCover, items []models.MediaItem, allowSingleC
 
 func buildPlan(parsed ParsedCover, item models.MediaItem, slot models.CoverSlot, score float64) ImportPlan {
 	status := ImportStatusReady
-	message := "Kann übernommen werden."
+	message := "Dateiname wurde automatisch zugeordnet."
 	overwrites := slot.Exists
 	if overwrites {
 		status = ImportStatusOverwrite
-		message = "Ein vorhandenes Cover wird ersetzt."
+		message = "Dateiname wurde automatisch zugeordnet; ein vorhandenes Cover wird ersetzt."
 	}
 	return ImportPlan{
 		SourcePath:   parsed.SourcePath,
@@ -125,6 +126,29 @@ func buildPlan(parsed ParsedCover, item models.MediaItem, slot models.CoverSlot,
 		Overwrites:   overwrites,
 		Parsed:       parsed,
 		MatchedScore: score,
+	}
+}
+
+func buildTargetedPlan(parsed ParsedCover, item models.MediaItem, slot models.CoverSlot) ImportPlan {
+	message := "Wird direkt in die ausgewÃ¤hlte Position Ã¼bernommen. Der Dateiname wird dafÃ¼r nicht ausgewertet."
+	if slot.Exists {
+		message = "Wird direkt in die ausgewÃ¤hlte Position Ã¼bernommen und ersetzt das vorhandene Cover. Der Dateiname wird dafÃ¼r nicht ausgewertet."
+	}
+	return ImportPlan{
+		SourcePath:   parsed.SourcePath,
+		SourceFile:   parsed.FileName,
+		ItemID:       item.ID,
+		ItemTitle:    item.Title,
+		ItemType:     item.Type,
+		SlotKey:      slot.Key,
+		SlotLabel:    slot.Label,
+		TargetPath:   slot.TargetPath,
+		ExistingPath: slot.ExistingPath,
+		Status:       ImportStatusTargeted,
+		Message:      message,
+		CanApply:     true,
+		Overwrites:   slot.Exists,
+		Parsed:       parsed,
 	}
 }
 
@@ -223,7 +247,7 @@ func missingSlotMessage(item models.MediaItem, parsed ParsedCover) string {
 		}
 		return fmt.Sprintf("%s hat keine erkannte Staffel S%02d mit Medien.", item.Title, parsed.SeasonNumber)
 	}
-	return "Kein Zielslot für dieses Cover gefunden."
+	return "Kein Zielslot fÃ¼r dieses Cover gefunden."
 }
 
 func NormalizeTitle(input string) string {
