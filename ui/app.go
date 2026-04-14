@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -175,7 +176,8 @@ func (a *Application) showMainList() {
 			typeLabel := widget.NewLabel("[Serie]")
 			topLine := container.NewBorder(nil, nil, typeLabel, nil, titleLabel)
 			statusLine := container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, statusLabel)
-			return container.NewPadded(container.NewVBox(topLine, statusLine))
+			inner := container.New(layout.NewCustomPaddedVBoxLayout(2), topLine, statusLine)
+			return container.New(layout.NewCustomPaddedLayout(4, 4, 8, 8), inner)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			a.mu.RLock()
@@ -336,8 +338,9 @@ func (a *Application) showDetail(itemID string) {
 	title := widget.NewLabelWithStyle(fmt.Sprintf("%s [%s]", item.Title, item.TypeLabel()), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	title.Truncation = fyne.TextTruncateEllipsis
 	status := widget.NewLabel(item.StatusLabel())
-	headerText := container.NewVBox(title, container.NewHBox(statusDot(item.Status), status))
-	header := container.NewBorder(nil, nil, container.NewVBox(backButton), nil, headerText)
+	statusRow := container.NewHBox(statusDot(item.Status), status)
+	headerText := container.New(layout.NewCustomPaddedVBoxLayout(2), title, statusRow)
+	header := container.NewBorder(nil, nil, backButton, nil, headerText)
 
 	structure := widget.NewLabel(itemStructureText(item))
 	structure.Wrapping = fyne.TextWrapWord
@@ -362,7 +365,7 @@ func (a *Application) showDetail(itemID string) {
 	})
 	pathRow := container.NewBorder(nil, nil, nil, openPathButton, pathLabel)
 
-	body := container.NewVBox(
+	body := container.New(layout.NewCustomPaddedVBoxLayout(4),
 		structure,
 		addButton,
 		slotRows,
@@ -392,7 +395,7 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 		a.selectAndPreviewForSlot(item.ID, slot)
 	})
 	actions := container.NewVBox(replaceButton, deleteButton)
-	return container.NewPadded(container.NewBorder(nil, nil, preview, actions, info))
+	return container.New(layout.NewCustomPaddedLayout(4, 4, 4, 4), container.NewBorder(nil, nil, preview, actions, info))
 }
 
 func slotPreview(slot models.CoverSlot) fyne.CanvasObject {
