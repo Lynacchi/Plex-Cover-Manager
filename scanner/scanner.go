@@ -18,6 +18,8 @@ var videoExtensions = map[string]bool{
 	".wmv": true, ".flv": true, ".mov": true,
 }
 
+var localCoverExtensions = []string{".jpg", ".jpeg", ".png", ".webp"}
+
 var seasonPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^s\s*0*(\d{1,2})$`),
 	regexp.MustCompile(`(?i)^season[\s._-]*0*(\d{1,2})$`),
@@ -50,11 +52,11 @@ func ScanLibrary(ctx context.Context, cfg models.AppConfig) ([]models.MediaItem,
 		}
 		switch mediaPath.Type {
 		case models.MediaTypeMovie:
-			scanned, scanWarnings := scanMoviePath(ctx, mediaPath.Path)
+			scanned, scanWarnings := scanMoviePath(ctx, mediaPath.Path, cfg)
 			items = append(items, scanned...)
 			warnings = append(warnings, scanWarnings...)
 		default:
-			scanned, scanWarnings := scanSeriesPath(ctx, mediaPath.Path)
+			scanned, scanWarnings := scanSeriesPath(ctx, mediaPath.Path, cfg)
 			items = append(items, scanned...)
 			warnings = append(warnings, scanWarnings...)
 		}
@@ -69,7 +71,7 @@ func ScanLibrary(ctx context.Context, cfg models.AppConfig) ([]models.MediaItem,
 	return items, warnings
 }
 
-func scanSeriesPath(ctx context.Context, root string) ([]models.MediaItem, []models.ScanWarning) {
+func scanSeriesPath(ctx context.Context, root string, cfg models.AppConfig) ([]models.MediaItem, []models.ScanWarning) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, []models.ScanWarning{{Path: root, Message: err.Error()}}
@@ -84,7 +86,7 @@ func scanSeriesPath(ctx context.Context, root string) ([]models.MediaItem, []mod
 			continue
 		}
 		showPath := filepath.Join(root, entry.Name())
-		item, err := scanSeriesItem(root, showPath, entry.Name())
+		item, err := scanSeriesItem(root, showPath, entry.Name(), cfg)
 		if err != nil {
 			warnings = append(warnings, models.ScanWarning{Path: showPath, Message: err.Error()})
 			continue
@@ -94,7 +96,7 @@ func scanSeriesPath(ctx context.Context, root string) ([]models.MediaItem, []mod
 	return items, warnings
 }
 
-func scanSeriesItem(root, showPath, title string) (models.MediaItem, error) {
+func scanSeriesItem(root, showPath, title string, cfg models.AppConfig) (models.MediaItem, error) {
 	item := models.MediaItem{
 		ID:          filepath.Clean(showPath),
 		Title:       title,
@@ -119,19 +121,24 @@ func scanSeriesItem(root, showPath, title string) (models.MediaItem, error) {
 	})
 	item.Seasons = seasons
 
-	item.CoverSlots = append(item.CoverSlots, mainCoverSlot(showPath))
+	mainSlot := mainCoverSlot(showPath)
+	checkSlotOptimization(&mainSlot, cfg)
+	item.CoverSlots = append(item.CoverSlots, mainSlot)
 	for _, season := range seasons {
 		targetDir := showPath
 		if !item.FlatStructure && season.Path != "" {
 			targetDir = season.Path
 		}
-		item.CoverSlots = append(item.CoverSlots, seasonCoverSlot(targetDir, season.Number))
+		isFlat := item.FlatStructure
+		slot := seasonCoverSlot(targetDir, season.Number, cfg.ServerMode, isFlat)
+		checkSlotOptimization(&slot, cfg)
+		item.CoverSlots = append(item.CoverSlots, slot)
 	}
 	item.RecalculateStatus()
 	return item, nil
 }
 
-func scanMoviePath(ctx context.Context, root string) ([]models.MediaItem, []models.ScanWarning) {
+func scanMoviePath(ctx context.Context, root string, cfg models.AppConfig) ([]models.MediaItem, []models.ScanWarning) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, []models.ScanWarning{{Path: root, Message: err.Error()}}
@@ -145,19 +152,21 @@ func scanMoviePath(ctx context.Context, root string) ([]models.MediaItem, []mode
 		}
 		path := filepath.Join(root, entry.Name())
 		if entry.IsDir() {
-			item := scanMovieFolder(root, path, entry.Name())
+			item := scanMovieFolder(root, path, entry.Name(), cfg)
 			items = append(items, item)
 			continue
 		}
 		if isVideoFile(entry.Name()) {
-			item := scanFlatMovie(root, path, entry.Name())
+			item := scanFlatMovie(root, path, entry.Name(), cfg)
 			items = append(items, item)
 		}
 	}
 	return items, warnings
 }
 
-func scanMovieFolder(root, moviePath, title string) models.MediaItem {
+func scanMovieFolder(root, moviePath, title string, cfg models.AppConfig) models.MediaItem {
+	slot := mainCoverSlot(moviePath)
+	checkSlotOptimization(&slot, cfg)
 	item := models.MediaItem{
 		ID:          filepath.Clean(moviePath),
 		Title:       title,
@@ -165,16 +174,16 @@ func scanMovieFolder(root, moviePath, title string) models.MediaItem {
 		Type:        models.MediaTypeMovie,
 		LibraryPath: filepath.Clean(root),
 		Path:        filepath.Clean(moviePath),
-		CoverSlots:  []models.CoverSlot{mainCoverSlot(moviePath)},
+		CoverSlots:  []models.CoverSlot{slot},
 	}
 	item.RecalculateStatus()
 	return item
 }
 
-func scanFlatMovie(root, mediaFilePath, fileName string) models.MediaItem {
+func scanFlatMovie(root, mediaFilePath, fileName string, cfg models.AppConfig) models.MediaItem {
 	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	target := filepath.Join(root, title+".jpg")
-	existingPath, size, exists := findExistingCover(root, []string{title + ".jpg", title + ".jpeg", title + ".png"})
+	existingPath, size, exists := findExistingCover(root, coverNameCandidates(title))
 	slot := models.CoverSlot{
 		Key:          models.MainSlotKey(),
 		Label:        "Main",
@@ -185,6 +194,7 @@ func scanFlatMovie(root, mediaFilePath, fileName string) models.MediaItem {
 		Exists:       exists,
 		SizeBytes:    size,
 	}
+	checkSlotOptimization(&slot, cfg)
 	item := models.MediaItem{
 		ID:            filepath.Clean(mediaFilePath),
 		Title:         title,
@@ -286,7 +296,7 @@ func parseSeasonFolder(name string) (int, bool) {
 }
 
 func mainCoverSlot(dir string) models.CoverSlot {
-	existingPath, size, exists := findExistingCover(dir, []string{"poster.jpg", "poster.jpeg", "poster.png"})
+	existingPath, size, exists := findExistingCover(dir, coverNameCandidates("poster"))
 	return models.CoverSlot{
 		Key:          models.MainSlotKey(),
 		Label:        "Main",
@@ -299,9 +309,22 @@ func mainCoverSlot(dir string) models.CoverSlot {
 	}
 }
 
-func seasonCoverSlot(dir string, season int) models.CoverSlot {
+func seasonCoverSlot(dir string, season int, mode models.ServerMode, isFlat bool) models.CoverSlot {
+	if mode == models.ServerModeJellyfin && !isFlat {
+		existingPath, size, exists := findExistingCover(dir, coverNameCandidates("poster"))
+		return models.CoverSlot{
+			Key:          models.SeasonSlotKey(season),
+			Label:        seasonLabel(season),
+			Kind:         models.CoverKindSeason,
+			SeasonNumber: season,
+			TargetPath:   filepath.Join(dir, "poster.jpg"),
+			ExistingPath: existingPath,
+			Exists:       exists,
+			SizeBytes:    size,
+		}
+	}
 	base := fmt.Sprintf("season%02d-poster", season)
-	existingPath, size, exists := findExistingCover(dir, []string{base + ".jpg", base + ".jpeg", base + ".png"})
+	existingPath, size, exists := findExistingCover(dir, coverNameCandidates(base))
 	return models.CoverSlot{
 		Key:          models.SeasonSlotKey(season),
 		Label:        seasonLabel(season),
@@ -312,6 +335,44 @@ func seasonCoverSlot(dir string, season int) models.CoverSlot {
 		Exists:       exists,
 		SizeBytes:    size,
 	}
+}
+
+func coverNameCandidates(base string) []string {
+	candidates := make([]string, 0, len(localCoverExtensions))
+	for _, ext := range localCoverExtensions {
+		candidates = append(candidates, base+ext)
+	}
+	return candidates
+}
+
+func checkSlotOptimization(slot *models.CoverSlot, cfg models.AppConfig) {
+	if cfg.Compression.Disabled || !slot.Exists || slot.ExistingPath == "" {
+		slot.IsOptimized = true
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(slot.ExistingPath))
+	if ext != ".jpg" && ext != ".jpeg" {
+		slot.IsOptimized = false
+		slot.OptimizeHint = fmt.Sprintf("Format: %s", strings.ToUpper(strings.TrimPrefix(ext, ".")))
+		return
+	}
+	thresholdBytes := int64(cfg.OptimizeThresholdKB) * 1024
+	if cfg.OptimizeThresholdKB > 0 && slot.SizeBytes > thresholdBytes {
+		slot.IsOptimized = false
+		slot.OptimizeHint = fmt.Sprintf("Zu groß (%s, Limit: %d KB)", formatSize(slot.SizeBytes), cfg.OptimizeThresholdKB)
+		return
+	}
+	slot.IsOptimized = true
+}
+
+func formatSize(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	if size < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(size)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 }
 
 func findExistingCover(dir string, candidates []string) (string, int64, bool) {

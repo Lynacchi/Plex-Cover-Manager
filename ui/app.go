@@ -378,7 +378,11 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 	preview := slotPreview(slot)
 	infoText := fmt.Sprintf("%s\nZiel: %s\nStatus: Fehlt", slot.Label, filepath.Base(slot.TargetPath))
 	if slot.Exists {
-		infoText = fmt.Sprintf("%s\nDatei: %s\nGröße: %s\nStatus: Vorhanden", slot.Label, filepath.Base(slot.ExistingPath), formatBytes(slot.SizeBytes))
+		optStatus := "Optimiert"
+		if !slot.IsOptimized && slot.OptimizeHint != "" {
+			optStatus = slot.OptimizeHint
+		}
+		infoText = fmt.Sprintf("%s\nDatei: %s\nGröße: %s\nStatus: Vorhanden\nOptimierung: %s", slot.Label, filepath.Base(slot.ExistingPath), formatBytes(slot.SizeBytes), optStatus)
 	}
 	info := widget.NewLabel(infoText)
 	info.Wrapping = fyne.TextWrapWord
@@ -394,8 +398,32 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 	replaceButton := widget.NewButton("Ersetzen", func() {
 		a.selectAndPreviewForSlot(item.ID, slot)
 	})
-	actions := container.NewVBox(replaceButton, deleteButton)
+	slotCopy := slot
+	itemID := item.ID
+	itemTitle := item.Title
+	optimizeButton := widget.NewButton("Optimieren", func() {
+		a.optimizeSingleCover(itemID, itemTitle, slotCopy)
+	})
+	if !slot.Exists || slot.IsOptimized {
+		optimizeButton.Disable()
+	}
+	actions := container.NewVBox(replaceButton, deleteButton, optimizeButton)
 	return container.New(layout.NewCustomPaddedLayout(4, 4, 4, 4), container.NewBorder(nil, nil, preview, actions, info))
+}
+
+func (a *Application) optimizeSingleCover(itemID, itemTitle string, slot models.CoverSlot) {
+	cfg := a.config.Get()
+	go func() {
+		_, err := cover.OptimizeCover(slot, itemTitle, cfg.Compression)
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(err, a.window)
+				return
+			}
+			dialog.ShowInformation("Optimierung", fmt.Sprintf("%s wurde optimiert. Original gesichert.", slot.Label), a.window)
+			a.refreshData("Scan läuft ...", func() { a.showDetail(itemID) })
+		})
+	}()
 }
 
 func slotPreview(slot models.CoverSlot) fyne.CanvasObject {
@@ -586,6 +614,26 @@ func (a *Application) showSettings() {
 	title := widget.NewLabelWithStyle("Einstellungen", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	header := container.NewBorder(nil, nil, backButton, nil, title)
 
+	// --- Server mode ---
+	modeSelect := widget.NewSelect([]string{"Plex", "Jellyfin"}, nil)
+	if cfg.ServerMode == models.ServerModeJellyfin {
+		modeSelect.SetSelected("Jellyfin")
+	} else {
+		modeSelect.SetSelected("Plex")
+	}
+	modeSelect.OnChanged = func(value string) {
+		newMode := models.ServerModePlex
+		if value == "Jellyfin" {
+			newMode = models.ServerModeJellyfin
+		}
+		oldCfg := a.config.Get()
+		if oldCfg.ServerMode == newMode {
+			return
+		}
+		a.confirmModeSwitch(newMode)
+	}
+
+	// --- Media paths ---
 	pathsBox := container.NewVBox()
 	if len(cfg.MediaPaths) == 0 {
 		hint := widget.NewLabel("Noch keine Medienpfade konfiguriert.")
@@ -598,6 +646,9 @@ func (a *Application) showSettings() {
 		pathsBox.Add(a.settingsPathRow(index, pathCopy))
 	}
 	addPathButton := widget.NewButton("Pfad hinzufügen", a.addMediaPath)
+
+	// --- Compression ---
+	compressionControls := container.NewVBox()
 
 	qualityValue := widget.NewLabel(fmt.Sprintf("%d", cfg.Compression.JPEGQuality))
 	qualitySlider := widget.NewSlider(70, 100)
@@ -630,6 +681,49 @@ func (a *Application) showSettings() {
 		}
 	}
 
+	thresholdEntry := widget.NewEntry()
+	thresholdEntry.SetText(strconv.Itoa(cfg.OptimizeThresholdKB))
+	thresholdEntry.OnChanged = func(value string) {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && parsed > 0 {
+			a.saveConfig(func(cfg *models.AppConfig) {
+				cfg.OptimizeThresholdKB = parsed
+			})
+		}
+	}
+
+	compressionControls.Add(container.NewBorder(nil, nil, widget.NewLabel("JPEG-Qualität"), qualityValue, qualitySlider))
+	compressionControls.Add(container.NewGridWithColumns(2,
+		container.NewBorder(nil, nil, widget.NewLabel("Max. Breite"), nil, widthEntry),
+		container.NewBorder(nil, nil, widget.NewLabel("Max. Höhe"), nil, heightEntry),
+	))
+	compressionControls.Add(container.NewBorder(nil, nil, widget.NewLabel("Optimierungs-Schwellwert (KB)"), nil, thresholdEntry))
+
+	compressionCheck := widget.NewCheck("Komprimierung aktiviert", func(enabled bool) {
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.Compression.Disabled = !enabled
+		})
+		if enabled {
+			compressionControls.Show()
+		} else {
+			compressionControls.Hide()
+		}
+	})
+	compressionCheck.SetChecked(!cfg.Compression.Disabled)
+	if cfg.Compression.Disabled {
+		compressionControls.Hide()
+	}
+
+	// --- Batch optimization ---
+	unoptimizedCount := a.countUnoptimizedCovers()
+	optimizeLabel := widget.NewLabel(fmt.Sprintf("%d Cover können optimiert werden.", unoptimizedCount))
+	batchOptimizeButton := widget.NewButton("Alle optimieren", func() {
+		a.batchOptimize()
+	})
+	if unoptimizedCount == 0 {
+		batchOptimizeButton.Disable()
+	}
+
+	// --- Config file ---
 	configPath := widget.NewLabel(fmt.Sprintf("Config: %s", a.config.Path()))
 	configPath.Wrapping = fyne.TextWrapWord
 	configPath.Selectable = true
@@ -646,20 +740,141 @@ func (a *Application) showSettings() {
 	configRow := container.NewBorder(nil, nil, nil, container.NewHBox(openConfigFolderButton, openConfigFileButton), configPath)
 
 	body := container.NewVBox(
+		widget.NewLabelWithStyle("Server-Typ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewBorder(nil, nil, widget.NewLabel("Modus"), nil, modeSelect),
+		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Medienpfade", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		pathsBox,
 		addPathButton,
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Komprimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewBorder(nil, nil, widget.NewLabel("JPEG-Qualität"), qualityValue, qualitySlider),
-		container.NewGridWithColumns(2,
-			container.NewBorder(nil, nil, widget.NewLabel("Max. Breite"), nil, widthEntry),
-			container.NewBorder(nil, nil, widget.NewLabel("Max. Höhe"), nil, heightEntry),
-		),
+		compressionCheck,
+		compressionControls,
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Optimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		optimizeLabel,
+		batchOptimizeButton,
 		widget.NewSeparator(),
 		configRow,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
+}
+
+func (a *Application) confirmModeSwitch(newMode models.ServerMode) {
+	modeLabel := "Plex"
+	if newMode == models.ServerModeJellyfin {
+		modeLabel = "Jellyfin"
+	}
+	a.mu.RLock()
+	items := append([]models.MediaItem(nil), a.items...)
+	a.mu.RUnlock()
+
+	content := widget.NewLabel(fmt.Sprintf("Möchtest du bestehende Staffel-Cover umbenennen, damit sie dem %s-Namensschema entsprechen?\n\nBetrifft nur Serien mit Staffelordnern.", modeLabel))
+	content.Wrapping = fyne.TextWrapWord
+	modeDialog := dialog.NewCustomWithoutButtons("Server-Typ wechseln", content, a.window)
+
+	switchMode := func(rename bool) {
+		modeDialog.Hide()
+		if rename {
+			go func() {
+				renamed, errs := cover.RenameCoversForModeSwitch(items, newMode)
+				fyne.Do(func() {
+					a.saveConfig(func(cfg *models.AppConfig) {
+						cfg.ServerMode = newMode
+					})
+					msg := fmt.Sprintf("%d Cover umbenannt.", renamed)
+					if len(errs) > 0 {
+						msg += fmt.Sprintf("\n\nFehler:\n%s", strings.Join(errs, "\n"))
+					}
+					dialog.ShowInformation("Modus gewechselt", msg, a.window)
+					a.refreshData("Scan läuft ...", func() { a.showSettings() })
+				})
+			}()
+			return
+		}
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.ServerMode = newMode
+		})
+		a.refreshData("Scan läuft ...", func() { a.showSettings() })
+	}
+
+	cancelButton := widget.NewButton("Abbrechen", func() {
+		modeDialog.Hide()
+		a.showSettings()
+	})
+	withoutRenameButton := widget.NewButton("Ohne Umbenennen", func() {
+		switchMode(false)
+	})
+	renameButton := widget.NewButton("Umbenennen", func() {
+		switchMode(true)
+	})
+	renameButton.Importance = widget.HighImportance
+	modeDialog.SetButtons([]fyne.CanvasObject{cancelButton, withoutRenameButton, renameButton})
+	modeDialog.Show()
+}
+
+func (a *Application) countUnoptimizedCovers() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	count := 0
+	for _, item := range a.items {
+		for _, slot := range item.CoverSlots {
+			if slot.Exists && !slot.IsOptimized {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func (a *Application) batchOptimize() {
+	a.mu.RLock()
+	type optimizeJob struct {
+		itemTitle string
+		slot      models.CoverSlot
+	}
+	var jobs []optimizeJob
+	for _, item := range a.items {
+		for _, slot := range item.CoverSlots {
+			if slot.Exists && !slot.IsOptimized {
+				jobs = append(jobs, optimizeJob{itemTitle: item.Title, slot: slot})
+			}
+		}
+	}
+	a.mu.RUnlock()
+
+	if len(jobs) == 0 {
+		dialog.ShowInformation("Optimierung", "Keine Cover zum Optimieren gefunden.", a.window)
+		return
+	}
+
+	cfg := a.config.Get()
+	dialog.NewConfirm("Batch-Optimierung",
+		fmt.Sprintf("%d Cover werden optimiert. Originale werden gesichert.\nFortfahren?", len(jobs)),
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			go func() {
+				optimized := 0
+				var failures []string
+				for _, job := range jobs {
+					if _, err := cover.OptimizeCover(job.slot, job.itemTitle, cfg.Compression); err != nil {
+						failures = append(failures, fmt.Sprintf("%s (%s): %s", job.itemTitle, job.slot.Label, err.Error()))
+						continue
+					}
+					optimized++
+				}
+				fyne.Do(func() {
+					msg := fmt.Sprintf("%d Cover optimiert.", optimized)
+					if len(failures) > 0 {
+						msg += fmt.Sprintf("\n\nFehler:\n%s", strings.Join(failures, "\n"))
+					}
+					dialog.ShowInformation("Batch-Optimierung", msg, a.window)
+					a.refreshData("Scan läuft ...", func() { a.showSettings() })
+				})
+			}()
+		}, a.window).Show()
 }
 
 func (a *Application) settingsPathRow(index int, mediaPath models.MediaPath) fyne.CanvasObject {

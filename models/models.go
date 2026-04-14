@@ -14,6 +14,13 @@ const (
 	MediaTypeMovie  MediaType = "movie"
 )
 
+type ServerMode string
+
+const (
+	ServerModePlex    ServerMode = "plex"
+	ServerModeJellyfin ServerMode = "jellyfin"
+)
+
 type CoverStatus string
 
 const (
@@ -35,14 +42,17 @@ type MediaPath struct {
 }
 
 type CompressionConfig struct {
-	JPEGQuality int `json:"jpeg_quality"`
-	MaxWidth    int `json:"max_width"`
-	MaxHeight   int `json:"max_height"`
+	Disabled    bool `json:"disabled"`
+	JPEGQuality int  `json:"jpeg_quality"`
+	MaxWidth    int  `json:"max_width"`
+	MaxHeight   int  `json:"max_height"`
 }
 
 type AppConfig struct {
-	MediaPaths  []MediaPath       `json:"media_paths"`
-	Compression CompressionConfig `json:"compression"`
+	ServerMode          ServerMode        `json:"server_mode"`
+	MediaPaths          []MediaPath       `json:"media_paths"`
+	Compression         CompressionConfig `json:"compression"`
+	OptimizeThresholdKB int               `json:"optimize_threshold_kb"`
 }
 
 type CoverSlot struct {
@@ -54,6 +64,8 @@ type CoverSlot struct {
 	ExistingPath string
 	Exists       bool
 	SizeBytes    int64
+	IsOptimized  bool
+	OptimizeHint string
 }
 
 type SeasonInfo struct {
@@ -86,16 +98,21 @@ type ScanWarning struct {
 
 func DefaultConfig() AppConfig {
 	return AppConfig{
+		ServerMode: ServerModePlex,
 		MediaPaths: []MediaPath{},
 		Compression: CompressionConfig{
 			JPEGQuality: 85,
 			MaxWidth:    1000,
 			MaxHeight:   1500,
 		},
+		OptimizeThresholdKB: 300,
 	}
 }
 
 func (c *AppConfig) Normalize() {
+	if c.ServerMode != ServerModeJellyfin {
+		c.ServerMode = ServerModePlex
+	}
 	if c.Compression.JPEGQuality == 0 {
 		c.Compression.JPEGQuality = 85
 	}
@@ -116,6 +133,9 @@ func (c *AppConfig) Normalize() {
 	}
 	if c.Compression.MaxHeight < 1 {
 		c.Compression.MaxHeight = 1500
+	}
+	if c.OptimizeThresholdKB <= 0 {
+		c.OptimizeThresholdKB = 300
 	}
 	for i := range c.MediaPaths {
 		if c.MediaPaths[i].Type != MediaTypeMovie {

@@ -1,6 +1,7 @@
 package cover
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -53,5 +54,90 @@ func TestProcessCoverResizesAndWritesJPEG(t *testing.T) {
 	}
 	if decoded.Bounds().Dx() != 1000 || decoded.Bounds().Dy() != 1500 {
 		t.Fatalf("decoded size = %dx%d", decoded.Bounds().Dx(), decoded.Bounds().Dy())
+	}
+}
+
+func TestApplyImportPlanDisabledCopiesSourceAndPreservesExtension(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.png")
+	target := filepath.Join(dir, "poster.jpg")
+	content := []byte("not decoded when compression is disabled")
+	if err := os.WriteFile(source, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := ImportPlan{
+		SourcePath: source,
+		TargetPath: target,
+		CanApply:   true,
+	}
+	if _, err := ApplyImportPlan(plan, models.CompressionConfig{Disabled: true}); err != nil {
+		t.Fatalf("ApplyImportPlan() error = %v", err)
+	}
+
+	preservedTarget := filepath.Join(dir, "poster.png")
+	data, err := os.ReadFile(preservedTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, content) {
+		t.Fatalf("copied content = %q, want %q", data, content)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("unexpected compressed target at %s", target)
+	}
+}
+
+func TestRenameCoversForModeSwitch(t *testing.T) {
+	dir := t.TempDir()
+	seasonDir := filepath.Join(dir, "Season 01")
+	if err := os.MkdirAll(seasonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plexCover := filepath.Join(seasonDir, "season01-poster.jpg")
+	if err := os.WriteFile(plexCover, []byte("cover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	item := models.MediaItem{
+		Type: models.MediaTypeSeries,
+		CoverSlots: []models.CoverSlot{
+			{
+				Kind:         models.CoverKindSeason,
+				SeasonNumber: 1,
+				ExistingPath: plexCover,
+				Exists:       true,
+			},
+		},
+	}
+
+	renamed, errs := RenameCoversForModeSwitch([]models.MediaItem{item}, models.ServerModeJellyfin)
+	if renamed != 1 || len(errs) != 0 {
+		t.Fatalf("renamed = %d, errs = %#v", renamed, errs)
+	}
+	jellyfinCover := filepath.Join(seasonDir, "poster.jpg")
+	if _, err := os.Stat(jellyfinCover); err != nil {
+		t.Fatalf("jellyfin cover missing: %v", err)
+	}
+
+	item.CoverSlots[0].ExistingPath = jellyfinCover
+	renamed, errs = RenameCoversForModeSwitch([]models.MediaItem{item}, models.ServerModePlex)
+	if renamed != 1 || len(errs) != 0 {
+		t.Fatalf("renamed = %d, errs = %#v", renamed, errs)
+	}
+	if _, err := os.Stat(plexCover); err != nil {
+		t.Fatalf("plex cover missing: %v", err)
+	}
+}
+
+func TestOriginalBackupDirCanBeOverriddenByLauncher(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PCM_ORIGINALS_DIR", dir)
+
+	got, err := OriginalBackupDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(dir) {
+		t.Fatalf("OriginalBackupDir() = %q, want %q", got, filepath.Clean(dir))
 	}
 }

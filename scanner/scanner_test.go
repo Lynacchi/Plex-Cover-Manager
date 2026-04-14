@@ -3,6 +3,7 @@ package scanner
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"plexcovermanager/models"
@@ -63,6 +64,93 @@ func TestScanLibraryFlatMovie(t *testing.T) {
 	}
 	if got := filepath.Base(item.CoverSlots[0].TargetPath); got != "Example Movie (2020).jpg" {
 		t.Fatalf("target = %q", got)
+	}
+}
+
+func TestJellyfinSeasonFolderUsesPosterInSeasonFolder(t *testing.T) {
+	root := t.TempDir()
+	showDir := filepath.Join(root, "Example Show (2024)")
+	seasonDir := filepath.Join(showDir, "Season 01")
+	mustMkdir(t, seasonDir)
+	mustWrite(t, filepath.Join(seasonDir, "Example.Show.S01E01.mkv"))
+	mustWrite(t, filepath.Join(seasonDir, "poster.jpg"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		ServerMode: models.ServerModeJellyfin,
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeSeries}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	var seasonSlot models.CoverSlot
+	for _, slot := range items[0].CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 1 {
+			seasonSlot = slot
+		}
+	}
+	if !seasonSlot.Exists {
+		t.Fatalf("season slot not detected: %#v", items[0].CoverSlots)
+	}
+	if got, want := seasonSlot.TargetPath, filepath.Join(seasonDir, "poster.jpg"); got != want {
+		t.Fatalf("TargetPath = %q, want %q", got, want)
+	}
+}
+
+func TestJellyfinFlatSeriesKeepsPlexSeasonPosterName(t *testing.T) {
+	root := t.TempDir()
+	showDir := filepath.Join(root, "Example Show (2024)")
+	mustMkdir(t, showDir)
+	mustWrite(t, filepath.Join(showDir, "Example.Show.S01E01.mkv"))
+	mustWrite(t, filepath.Join(showDir, "season01-poster.jpg"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		ServerMode: models.ServerModeJellyfin,
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeSeries}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	if !items[0].FlatStructure {
+		t.Fatalf("expected flat structure: %#v", items[0])
+	}
+	var seasonSlot models.CoverSlot
+	for _, slot := range items[0].CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 1 {
+			seasonSlot = slot
+		}
+	}
+	if got, want := seasonSlot.TargetPath, filepath.Join(showDir, "season01-poster.jpg"); got != want {
+		t.Fatalf("TargetPath = %q, want %q", got, want)
+	}
+}
+
+func TestScanDetectsUnoptimizedWebPCover(t *testing.T) {
+	root := t.TempDir()
+	movieDir := filepath.Join(root, "Example Movie (2020)")
+	mustMkdir(t, movieDir)
+	mustWrite(t, filepath.Join(movieDir, "poster.webp"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeMovie}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	slot := items[0].CoverSlots[0]
+	if !slot.Exists {
+		t.Fatalf("webp cover not detected: %#v", slot)
+	}
+	if slot.IsOptimized || !strings.Contains(slot.OptimizeHint, "WEBP") {
+		t.Fatalf("optimization state = optimized %v, hint %q", slot.IsOptimized, slot.OptimizeHint)
 	}
 }
 

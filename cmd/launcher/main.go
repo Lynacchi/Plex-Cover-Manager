@@ -19,7 +19,7 @@ import (
 const appPayloadName = "PlexCoverManager.app.exe"
 
 var payloadVersion = "dev"
-var appVersion = "0.0.5"
+var appVersion = "0.0.6"
 
 //go:embed payload/*
 var payload embed.FS
@@ -148,6 +148,9 @@ func launchApp(dir, mode string) error {
 	cmd := exec.Command(appPath)
 	cmd.Dir = dir
 	cmd.Env = os.Environ()
+	if launcherPath, err := os.Executable(); err == nil {
+		cmd.Env = append(cmd.Env, "PCM_ORIGINALS_DIR="+filepath.Join(filepath.Dir(launcherPath), "originals"))
+	}
 	if mode == "mesa" {
 		cmd.Env = append(cmd.Env,
 			"LIBGL_ALWAYS_SOFTWARE=true",
