@@ -171,13 +171,11 @@ func (a *Application) showMainList() {
 			titleLabel := widget.NewLabelWithStyle("Titel", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			titleLabel.Truncation = fyne.TextTruncateEllipsis
 			statusLabel := widget.NewLabel("Status")
-			statusLabel.Importance = widget.LowImportance
 			statusLabel.Truncation = fyne.TextTruncateEllipsis
 			typeLabel := widget.NewLabel("[Serie]")
-			typeLabel.Importance = widget.LowImportance
 			topLine := container.NewBorder(nil, nil, typeLabel, nil, titleLabel)
-			textBox := container.NewVBox(topLine, statusLabel)
-			return container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, textBox)
+			statusLine := container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, statusLabel)
+			return container.NewPadded(container.NewVBox(topLine, statusLine))
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			a.mu.RLock()
@@ -186,13 +184,14 @@ func (a *Application) showMainList() {
 				return
 			}
 			item := a.filtered[id]
-			row := obj.(*fyne.Container)
-			textBox := row.Objects[0].(*fyne.Container)
+			padded := obj.(*fyne.Container)
+			textBox := padded.Objects[0].(*fyne.Container)
 			topLine := textBox.Objects[0].(*fyne.Container)
 			titleLabel := topLine.Objects[0].(*widget.Label)
 			typeLabel := topLine.Objects[1].(*widget.Label)
-			statusLabel := textBox.Objects[1].(*widget.Label)
-			dotCenter := row.Objects[1].(*fyne.Container)
+			statusLine := textBox.Objects[1].(*fyne.Container)
+			statusLabel := statusLine.Objects[0].(*widget.Label)
+			dotCenter := statusLine.Objects[1].(*fyne.Container)
 			dotGrid := dotCenter.Objects[0].(*fyne.Container)
 			dot := dotGrid.Objects[0].(*canvas.Circle)
 			applyStatusDot(dot, item.Status)
@@ -335,8 +334,10 @@ func (a *Application) showDetail(itemID string) {
 
 	backButton := widget.NewButton("Zurück", a.showMainList)
 	title := widget.NewLabelWithStyle(fmt.Sprintf("%s [%s]", item.Title, item.TypeLabel()), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title.Truncation = fyne.TextTruncateEllipsis
 	status := widget.NewLabel(item.StatusLabel())
-	header := container.NewBorder(nil, nil, backButton, nil, container.NewVBox(title, container.NewHBox(statusDot(item.Status), status)))
+	headerText := container.NewVBox(title, container.NewHBox(statusDot(item.Status), status))
+	header := container.NewBorder(nil, nil, container.NewVBox(backButton), nil, headerText)
 
 	structure := widget.NewLabel(itemStructureText(item))
 	structure.Wrapping = fyne.TextWrapWord
@@ -354,7 +355,7 @@ func (a *Application) showDetail(itemID string) {
 	pathLabel.Wrapping = fyne.TextWrapWord
 	pathLabel.Selectable = true
 	openPathButton := widget.NewButton("Ordner öffnen", func() {
-		target := displayItemPath(item)
+		target := itemFolderPath(item)
 		if err := openFolderInExplorer(target); err != nil {
 			dialog.ShowError(err, a.window)
 		}
@@ -364,9 +365,7 @@ func (a *Application) showDetail(itemID string) {
 	body := container.NewVBox(
 		structure,
 		addButton,
-		widget.NewSeparator(),
 		slotRows,
-		widget.NewSeparator(),
 		pathRow,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
@@ -393,7 +392,7 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 		a.selectAndPreviewForSlot(item.ID, slot)
 	})
 	actions := container.NewVBox(replaceButton, deleteButton)
-	return container.NewBorder(nil, widget.NewSeparator(), preview, actions, info)
+	return container.NewPadded(container.NewBorder(nil, nil, preview, actions, info))
 }
 
 func slotPreview(slot models.CoverSlot) fyne.CanvasObject {
@@ -632,7 +631,7 @@ func (a *Application) showSettings() {
 	configPath.Wrapping = fyne.TextWrapWord
 	configPath.Selectable = true
 	openConfigFolderButton := widget.NewButton("Ordner öffnen", func() {
-		if err := openFileInExplorer(a.config.Path()); err != nil {
+		if err := openFolderInExplorer(filepath.Dir(a.config.Path())); err != nil {
 			dialog.ShowError(err, a.window)
 		}
 	})
@@ -777,6 +776,16 @@ func displayItemPath(item models.MediaItem) string {
 		return item.MediaFilePath
 	}
 	return item.Path
+}
+
+func itemFolderPath(item models.MediaItem) string {
+	if item.Path != "" {
+		return item.Path
+	}
+	if item.MediaFilePath != "" {
+		return filepath.Dir(item.MediaFilePath)
+	}
+	return displayItemPath(item)
 }
 
 func formatBytes(size int64) string {

@@ -36,7 +36,7 @@ $env:CGO_ENABLED = "1"
 
 $appVersion = (Get-Content (Join-Path $root "VERSION") -Raw).Trim()
 if ($appVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.4. Aktuell: $appVersion"
+    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.5. Aktuell: $appVersion"
 }
 
 go run .\tools\icongen

@@ -6,28 +6,61 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
+)
+
+const swShowNormal = 1
+
+var (
+	nativeShell32       = syscall.NewLazyDLL("shell32.dll")
+	nativeShellExecuteW = nativeShell32.NewProc("ShellExecuteW")
 )
 
 func openFolderInExplorer(path string) error {
-	cmd := exec.Command("explorer.exe", filepath.FromSlash(path))
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Start()
+	target := filepath.FromSlash(path)
+	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		target = filepath.Dir(target)
+	}
+	return shellExecute("open", target, "", "")
 }
 
 func openFileInExplorer(filePath string) error {
-	cmd := exec.Command("explorer.exe", "/select,", filepath.FromSlash(filePath))
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Start()
+	target := filepath.FromSlash(filePath)
+	return shellExecute("open", "explorer.exe", fmt.Sprintf(`/select,"%s"`, target), "")
 }
 
 func openFileWithDefault(filePath string) error {
-	cmd := exec.Command("cmd", "/c", "start", "", filepath.FromSlash(filePath))
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Start()
+	return shellExecute("open", filepath.FromSlash(filePath), "", "")
+}
+
+func shellExecute(verb, file, params, dir string) error {
+	result, _, err := nativeShellExecuteW.Call(
+		0,
+		utf16Arg(verb),
+		utf16Arg(file),
+		utf16Arg(params),
+		utf16Arg(dir),
+		swShowNormal,
+	)
+	if result <= 32 {
+		if err != syscall.Errno(0) {
+			return fmt.Errorf("Windows konnte %q nicht öffnen: %w", file, err)
+		}
+		return fmt.Errorf("Windows konnte %q nicht öffnen (ShellExecute-Code %d)", file, result)
+	}
+	return nil
+}
+
+func utf16Arg(value string) uintptr {
+	if value == "" {
+		return 0
+	}
+	return uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(value)))
 }
 
 func selectCoverFiles(multi bool) ([]string, error) {
