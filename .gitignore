@@ -8,7 +8,7 @@
 /release/
 /build/
 
-# Generated launcher payload; build.ps1 recreates this.
+# Generated launcher payload; build-portable.ps1 recreates this.
 cmd/launcher/payload/*
 !cmd/launcher/payload/placeholder.txt
 

@@ -1,27 +1,28 @@
 # Plex Cover Manager
 
-Plex Cover Manager ist eine kleine Windows-Desktop-App zum Verwalten lokaler Plex-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben prüfen und Plex-konform in deiner Medienstruktur ablegen lassen.
+Plex Cover Manager ist eine kleine Windows-Desktop-App zum Verwalten lokaler Plex-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben pruefen und Plex-konform in deiner Medienstruktur ablegen lassen.
 
 ## Features
 
 - Serien- und Filmordner scannen
-- fehlende, teilweise vorhandene und vollständige Cover anzeigen
+- fehlende, teilweise vorhandene und vollstaendige Cover anzeigen
 - Batch-Import mehrerer Cover-Dateien
 - Preview vor jedem Schreibvorgang
 - Plex-konforme Dateinamen wie `poster.jpg` und `season01-poster.jpg`
-- JPEG-Komprimierung mit konfigurierbarer Qualität und Maximalauflösung
-- Single-EXE für Windows
-- eingebauter Mesa/OpenGL-Fallback für VMs, RDP- und Server-Umgebungen
+- JPEG-Komprimierung mit konfigurierbarer Qualitaet und Maximalaufloesung
+- SMB-/UNC-Pfade wie `\\Server\Share\Media`
 
 ## Download
 
-Die fertige EXE wird über GitHub Releases bereitgestellt:
+Releases enthalten zwei Windows-EXEs:
 
-```text
-PlexCoverManager-v0.0.1.exe
-```
+- `PlexCoverManager-v0.0.3.exe`
+  Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-Die App benötigt keine Installation. Einfach die EXE starten.
+- `PlexCoverManager-v0.0.3-portable.exe`
+  Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
+
+Die App benoetigt keine Installation. Einfach die passende EXE starten.
 
 ## Build
 
@@ -30,16 +31,19 @@ Voraussetzungen:
 - Go
 - MSYS2 mit MinGW64 GCC
 
-Build starten:
+Normale Release-EXE bauen:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1
+powershell -ExecutionPolicy Bypass -File .\build-normal.ps1
 ```
 
-Der Build erzeugt:
+Portable Release-EXE mit Mesa-Fallback bauen:
 
-- `PlexCoverManager.exe`
-- `dist\PlexCoverManager-v0.0.1.exe`
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-portable.ps1
+```
+
+Die fertigen Dateien landen ausschliesslich in `dist/`.
 
 ## Version
 
@@ -49,17 +53,17 @@ Die aktuelle Version steht in:
 VERSION
 ```
 
-Für neue Releases die Version dort erhöhen, neu bauen und die Datei aus `dist/` als GitHub Release Asset hochladen.
+Fuer neue Releases die Version dort erhoehen, beide Builds ausfuehren und die Dateien aus `dist/` als GitHub Release Assets hochladen.
 
-## Hinweise
+## Speicherorte
 
-Die App speichert ihre Konfiguration unter:
+Konfiguration:
 
 ```text
 %APPDATA%\PlexCoverManager\config.json
 ```
 
-Diagnose-Logs liegen bei Bedarf unter:
+Logs:
 
 ```text
 %APPDATA%\PlexCoverManager\
