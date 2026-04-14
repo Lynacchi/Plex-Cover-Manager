@@ -13,6 +13,8 @@ import (
 	"plexcovermanager/models"
 )
 
+const scanWorkerLimit = 8
+
 var videoExtensions = map[string]bool{
 	".mkv": true, ".mp4": true, ".avi": true, ".ts": true, ".m2ts": true,
 	".wmv": true, ".flv": true, ".mov": true,
@@ -76,22 +78,61 @@ func scanSeriesPath(ctx context.Context, root string, cfg models.AppConfig) ([]m
 	if err != nil {
 		return nil, []models.ScanWarning{{Path: root, Message: err.Error()}}
 	}
-	items := make([]models.MediaItem, 0)
-	warnings := make([]models.ScanWarning, 0)
+
+	jobs := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		if ctx.Err() != nil {
-			break
+		if entry.IsDir() {
+			jobs = append(jobs, entry)
 		}
-		if !entry.IsDir() {
+	}
+	items := make([]models.MediaItem, 0, len(jobs))
+	warnings := make([]models.ScanWarning, 0)
+	if len(jobs) == 0 {
+		return items, warnings
+	}
+
+	type result struct {
+		item    models.MediaItem
+		warning *models.ScanWarning
+		skip    bool
+	}
+	jobCh := make(chan os.DirEntry)
+	resultCh := make(chan result, len(jobs))
+
+	for range workerCount(len(jobs)) {
+		go func() {
+			for entry := range jobCh {
+				if ctx.Err() != nil {
+					resultCh <- result{skip: true}
+					continue
+				}
+				showPath := filepath.Join(root, entry.Name())
+				item, err := scanSeriesItem(root, showPath, entry.Name(), cfg)
+				if err != nil {
+					warning := models.ScanWarning{Path: showPath, Message: err.Error()}
+					resultCh <- result{warning: &warning}
+					continue
+				}
+				resultCh <- result{item: item}
+			}
+		}()
+	}
+
+	for _, job := range jobs {
+		jobCh <- job
+	}
+	close(jobCh)
+
+	for range jobs {
+		res := <-resultCh
+		if res.skip {
 			continue
 		}
-		showPath := filepath.Join(root, entry.Name())
-		item, err := scanSeriesItem(root, showPath, entry.Name(), cfg)
-		if err != nil {
-			warnings = append(warnings, models.ScanWarning{Path: showPath, Message: err.Error()})
+		if res.warning != nil {
+			warnings = append(warnings, *res.warning)
 			continue
 		}
-		items = append(items, item)
+		items = append(items, res.item)
 	}
 	return items, warnings
 }
@@ -143,25 +184,60 @@ func scanMoviePath(ctx context.Context, root string, cfg models.AppConfig) ([]mo
 	if err != nil {
 		return nil, []models.ScanWarning{{Path: root, Message: err.Error()}}
 	}
-	items := make([]models.MediaItem, 0)
-	warnings := make([]models.ScanWarning, 0)
 
+	jobs := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		if ctx.Err() != nil {
-			break
+		if entry.IsDir() || isVideoFile(entry.Name()) {
+			jobs = append(jobs, entry)
 		}
-		path := filepath.Join(root, entry.Name())
-		if entry.IsDir() {
-			item := scanMovieFolder(root, path, entry.Name(), cfg)
-			items = append(items, item)
-			continue
-		}
-		if isVideoFile(entry.Name()) {
-			item := scanFlatMovie(root, path, entry.Name(), cfg)
+	}
+	items := make([]models.MediaItem, 0, len(jobs))
+	warnings := make([]models.ScanWarning, 0)
+	if len(jobs) == 0 {
+		return items, warnings
+	}
+
+	jobCh := make(chan os.DirEntry)
+	resultCh := make(chan models.MediaItem, len(jobs))
+	for range workerCount(len(jobs)) {
+		go func() {
+			for entry := range jobCh {
+				if ctx.Err() != nil {
+					resultCh <- models.MediaItem{}
+					continue
+				}
+				path := filepath.Join(root, entry.Name())
+				if entry.IsDir() {
+					resultCh <- scanMovieFolder(root, path, entry.Name(), cfg)
+					continue
+				}
+				resultCh <- scanFlatMovie(root, path, entry.Name(), cfg)
+			}
+		}()
+	}
+
+	for _, job := range jobs {
+		jobCh <- job
+	}
+	close(jobCh)
+
+	for range jobs {
+		item := <-resultCh
+		if item.ID != "" {
 			items = append(items, item)
 		}
 	}
 	return items, warnings
+}
+
+func workerCount(jobCount int) int {
+	if jobCount < 1 {
+		return 1
+	}
+	if jobCount < scanWorkerLimit {
+		return jobCount
+	}
+	return scanWorkerLimit
 }
 
 func scanMovieFolder(root, moviePath, title string, cfg models.AppConfig) models.MediaItem {

@@ -14,15 +14,16 @@ Plex Cover Manager ist eine kleine Windows-Desktop-App zum Verwalten lokaler Ple
 - optional deaktivierbare Komprimierung
 - Optimierungserkennung fuer zu grosse oder nicht als JPEG gespeicherte Cover
 - SMB-/UNC-Pfade wie `\\Server\Share\Media`
+- schnelle manuelle Pfadeingabe fuer Netzlaufwerke
 
 ## Download
 
 Releases enthalten zwei Windows-EXEs:
 
-- `PlexCoverManager-v0.0.6.exe`
+- `PlexCoverManager-v0.0.7.exe`
   Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-- `PlexCoverManager-v0.0.6-portable.exe`
+- `PlexCoverManager-v0.0.7-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die App benoetigt keine Installation. Einfach die passende EXE starten.

@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -37,6 +38,19 @@ const (
 	filterPartial  = "Nur teilweise"
 )
 
+var (
+	statusCompleteColor = color.NRGBA{R: 46, G: 204, B: 113, A: 255}
+	statusPartialColor  = color.NRGBA{R: 241, G: 196, B: 15, A: 255}
+	statusMissingColor  = color.NRGBA{R: 231, G: 76, B: 60, A: 255}
+	statusOptimizeColor = color.NRGBA{R: 52, G: 152, B: 219, A: 255}
+	statusUnknownColor  = color.NRGBA{R: 149, G: 165, B: 166, A: 255}
+)
+
+type visualStatus struct {
+	fill    color.NRGBA
+	tooltip string
+}
+
 type Application struct {
 	app    fyne.App
 	window fyne.Window
@@ -54,6 +68,69 @@ type Application struct {
 	currentDetailID string
 
 	scanCancel context.CancelFunc
+}
+
+type statusIndicator struct {
+	widget.BaseWidget
+
+	dot     *canvas.Circle
+	tooltip string
+	popup   *widget.PopUp
+}
+
+func newStatusIndicator(status visualStatus) *statusIndicator {
+	indicator := &statusIndicator{
+		dot: canvas.NewCircle(status.fill),
+	}
+	indicator.dot.StrokeColor = color.NRGBA{R: 10, G: 10, B: 10, A: 180}
+	indicator.dot.StrokeWidth = 1
+	indicator.ExtendBaseWidget(indicator)
+	indicator.SetStatus(status)
+	return indicator
+}
+
+func (s *statusIndicator) SetStatus(status visualStatus) {
+	s.tooltip = status.tooltip
+	s.dot.FillColor = status.fill
+	s.dot.Refresh()
+	s.Refresh()
+}
+
+func (s *statusIndicator) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(container.NewCenter(container.NewGridWrap(fyne.NewSize(14, 14), s.dot)))
+}
+
+func (s *statusIndicator) MouseIn(event *desktop.MouseEvent) {
+	if strings.TrimSpace(s.tooltip) == "" {
+		return
+	}
+	if event == nil {
+		return
+	}
+	c := fyne.CurrentApp().Driver().CanvasForObject(s)
+	if c == nil {
+		return
+	}
+	label := widget.NewLabel(s.tooltip)
+	label.Wrapping = fyne.TextWrapWord
+	content := container.New(layout.NewCustomPaddedLayout(6, 6, 8, 8), label)
+	s.popup = widget.NewPopUp(content, c)
+	s.popup.Resize(fyne.NewSize(260, content.MinSize().Height))
+	pos := event.AbsolutePosition.Add(fyne.NewPos(14, 14))
+	s.popup.ShowAtPosition(pos)
+}
+
+func (s *statusIndicator) MouseMoved(event *desktop.MouseEvent) {
+	if s.popup != nil {
+		s.popup.Move(event.AbsolutePosition.Add(fyne.NewPos(14, 14)))
+	}
+}
+
+func (s *statusIndicator) MouseOut() {
+	if s.popup != nil {
+		s.popup.Hide()
+		s.popup = nil
+	}
 }
 
 func NewApplication(configManager *config.Manager) *Application {
@@ -171,13 +248,10 @@ func (a *Application) showMainList() {
 		func() fyne.CanvasObject {
 			titleLabel := widget.NewLabelWithStyle("Titel", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			titleLabel.Truncation = fyne.TextTruncateEllipsis
-			statusLabel := widget.NewLabel("Status")
-			statusLabel.Truncation = fyne.TextTruncateEllipsis
-			typeLabel := widget.NewLabel("[Serie]")
-			topLine := container.NewBorder(nil, nil, typeLabel, nil, titleLabel)
-			statusLine := container.NewBorder(nil, nil, statusDot(models.CoverStatusNone), nil, statusLabel)
-			inner := container.New(layout.NewCustomPaddedVBoxLayout(2), topLine, statusLine)
-			return container.New(layout.NewCustomPaddedLayout(4, 4, 8, 8), inner)
+			typeLabel := widget.NewLabel("Serie")
+			indicator := newStatusIndicator(visualStatusForCover(models.CoverStatusNone, 0, "Kein Cover vorhanden"))
+			row := container.NewBorder(nil, nil, container.NewHBox(indicator, typeLabel), nil, titleLabel)
+			return container.New(layout.NewCustomPaddedLayout(2, 2, 8, 8), row)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			a.mu.RLock()
@@ -187,21 +261,17 @@ func (a *Application) showMainList() {
 			}
 			item := a.filtered[id]
 			padded := obj.(*fyne.Container)
-			textBox := padded.Objects[0].(*fyne.Container)
-			topLine := textBox.Objects[0].(*fyne.Container)
-			titleLabel := topLine.Objects[0].(*widget.Label)
-			typeLabel := topLine.Objects[1].(*widget.Label)
-			statusLine := textBox.Objects[1].(*fyne.Container)
-			statusLabel := statusLine.Objects[0].(*widget.Label)
-			dotCenter := statusLine.Objects[1].(*fyne.Container)
-			dotGrid := dotCenter.Objects[0].(*fyne.Container)
-			dot := dotGrid.Objects[0].(*canvas.Circle)
-			applyStatusDot(dot, item.Status)
-			typeLabel.SetText(fmt.Sprintf("[%s]", item.TypeLabel()))
+			row := padded.Objects[0].(*fyne.Container)
+			titleLabel := row.Objects[0].(*widget.Label)
+			leftBox := row.Objects[1].(*fyne.Container)
+			indicator := leftBox.Objects[0].(*statusIndicator)
+			typeLabel := leftBox.Objects[1].(*widget.Label)
+			indicator.SetStatus(visualStatusForItem(item))
+			typeLabel.SetText(item.TypeLabel())
 			titleLabel.SetText(item.Title)
-			statusLabel.SetText(item.StatusLabel())
 		},
 	)
+	a.list.HideSeparators = true
 	a.list.OnSelected = func(id widget.ListItemID) {
 		a.mu.RLock()
 		if id < 0 || id >= len(a.filtered) {
@@ -337,10 +407,10 @@ func (a *Application) showDetail(itemID string) {
 	backButton := widget.NewButton("Zurück", a.showMainList)
 	title := widget.NewLabelWithStyle(fmt.Sprintf("%s [%s]", item.Title, item.TypeLabel()), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	title.Truncation = fyne.TextTruncateEllipsis
-	status := widget.NewLabel(item.StatusLabel())
-	statusRow := container.NewHBox(statusDot(item.Status), status)
+	status := widget.NewLabel(itemStatusText(item))
+	statusRow := container.NewHBox(newStatusIndicator(visualStatusForItem(item)), status)
 	headerText := container.New(layout.NewCustomPaddedVBoxLayout(2), title, statusRow)
-	header := container.NewBorder(nil, nil, backButton, nil, headerText)
+	header := container.NewBorder(nil, nil, container.NewVBox(backButton), nil, headerText)
 
 	structure := widget.NewLabel(itemStructureText(item))
 	structure.Wrapping = fyne.TextWrapWord
@@ -387,6 +457,7 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 	info := widget.NewLabel(infoText)
 	info.Wrapping = fyne.TextWrapWord
 	info.Selectable = true
+	infoArea := container.NewBorder(nil, nil, newStatusIndicator(visualStatusForSlot(slot)), nil, info)
 
 	deleteButton := widget.NewButton("Löschen", func() {
 		a.confirmDeleteCover(item.ID, slot)
@@ -408,7 +479,7 @@ func (a *Application) coverSlotRow(item models.MediaItem, slot models.CoverSlot)
 		optimizeButton.Disable()
 	}
 	actions := container.NewVBox(replaceButton, deleteButton, optimizeButton)
-	return container.New(layout.NewCustomPaddedLayout(4, 4, 4, 4), container.NewBorder(nil, nil, preview, actions, info))
+	return container.New(layout.NewCustomPaddedLayout(4, 4, 4, 4), container.NewBorder(nil, nil, preview, actions, infoArea))
 }
 
 func (a *Application) optimizeSingleCover(itemID, itemTitle string, slot models.CoverSlot) {
@@ -881,12 +952,8 @@ func (a *Application) settingsPathRow(index int, mediaPath models.MediaPath) fyn
 	pathLabel := widget.NewLabel(mediaPath.Path)
 	pathLabel.Wrapping = fyne.TextWrapWord
 	pathLabel.Selectable = true
-	reachable := isPathReachable(mediaPath.Path)
-	reachabilityLabel := "erreichbar"
-	if !reachable {
-		reachabilityLabel = "nicht erreichbar"
-	}
-	statusLabel := widget.NewLabel(reachabilityLabel)
+	statusLabel := widget.NewLabel("prüfe...")
+	reachability := newStatusIndicator(visualStatus{fill: statusUnknownColor, tooltip: "Erreichbarkeit wird geprüft"})
 
 	typeSelect := widget.NewSelect([]string{"Serie", "Film"}, func(value string) {
 		mediaType := models.MediaTypeSeries
@@ -918,38 +985,73 @@ func (a *Application) settingsPathRow(index int, mediaPath models.MediaPath) fyn
 			a.showSettings()
 		}, a.window).Show()
 	})
-	return container.NewBorder(nil, widget.NewSeparator(), nil, container.NewHBox(typeSelect, reachabilityDot(reachable), statusLabel, deleteButton), pathLabel)
+	row := container.NewBorder(nil, widget.NewSeparator(), nil, container.NewHBox(typeSelect, reachability, statusLabel, deleteButton), pathLabel)
+	go func(path string) {
+		_, err := os.Stat(path)
+		reachable := err == nil
+		fyne.Do(func() {
+			if reachable {
+				statusLabel.SetText("erreichbar")
+			} else {
+				statusLabel.SetText("nicht erreichbar")
+			}
+			reachability.SetStatus(reachabilityStatus(reachable))
+		})
+	}(mediaPath.Path)
+	return row
 }
 
 func (a *Application) addMediaPath() {
-	go func() {
-		path, err := selectFolder()
-		fyne.Do(func() {
-			if err != nil {
-				dialog.ShowError(err, a.window)
-				return
-			}
-			if strings.TrimSpace(path) == "" {
-				return
-			}
-			typeSelect := widget.NewSelect([]string{"Serie", "Film"}, nil)
-			typeSelect.SetSelected("Serie")
-			content := container.NewVBox(widget.NewLabel(path), typeSelect)
-			dialog.NewCustomConfirm("Pfad hinzufügen", "Hinzufügen", "Abbrechen", content, func(ok bool) {
-				if !ok {
+	pathEntry := widget.NewEntry()
+	pathEntry.SetPlaceHolder(`\\Server\Share\Media oder C:\Media`)
+	typeSelect := widget.NewSelect([]string{"Serie", "Film"}, nil)
+	typeSelect.SetSelected("Serie")
+	hint := widget.NewLabel("Netzwerkpfade am schnellsten direkt einfügen. Durchsuchen ist nur optional.")
+	hint.Wrapping = fyne.TextWrapWord
+
+	browseButton := widget.NewButton("Durchsuchen...", func() {
+		go func() {
+			path, err := selectFolder()
+			fyne.Do(func() {
+				if err != nil {
+					dialog.ShowError(err, a.window)
 					return
 				}
-				mediaType := models.MediaTypeSeries
-				if typeSelect.Selected == "Film" {
-					mediaType = models.MediaTypeMovie
+				if strings.TrimSpace(path) != "" {
+					pathEntry.SetText(path)
 				}
-				a.saveConfig(func(cfg *models.AppConfig) {
-					cfg.MediaPaths = append(cfg.MediaPaths, models.MediaPath{Path: path, Type: mediaType})
-				})
-				a.showSettings()
-			}, a.window).Show()
+			})
+		}()
+	})
+
+	content := container.NewVBox(
+		widget.NewLabel("Medienpfad"),
+		pathEntry,
+		browseButton,
+		widget.NewLabel("Typ"),
+		typeSelect,
+		hint,
+	)
+	confirm := dialog.NewCustomConfirm("Pfad hinzufügen", "Hinzufügen", "Abbrechen", content, func(ok bool) {
+		if !ok {
+			return
+		}
+		path := strings.TrimSpace(pathEntry.Text)
+		if path == "" {
+			dialog.ShowInformation("Pfad fehlt", "Bitte gib einen Medienpfad ein oder wähle einen Ordner aus.", a.window)
+			return
+		}
+		mediaType := models.MediaTypeSeries
+		if typeSelect.Selected == "Film" {
+			mediaType = models.MediaTypeMovie
+		}
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.MediaPaths = append(cfg.MediaPaths, models.MediaPath{Path: path, Type: mediaType})
 		})
-	}()
+		a.showSettings()
+	}, a.window)
+	confirm.Resize(fyne.NewSize(640, 260))
+	confirm.Show()
 }
 
 func (a *Application) saveConfig(update func(*models.AppConfig)) {
@@ -1016,39 +1118,65 @@ func formatBytes(size int64) string {
 	return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 }
 
-func isPathReachable(path string) bool {
-	if _, err := os.Stat(path); err != nil {
-		return false
+func visualStatusForItem(item models.MediaItem) visualStatus {
+	return visualStatusForCover(item.Status, unoptimizedCoverCount(item), item.StatusLabel())
+}
+
+func visualStatusForCover(status models.CoverStatus, optimizeCount int, statusText string) visualStatus {
+	if optimizeCount > 0 {
+		return visualStatus{
+			fill:    statusOptimizeColor,
+			tooltip: fmt.Sprintf("%s\nOptimierung verfügbar: %d Cover", statusText, optimizeCount),
+		}
 	}
-	return true
-}
-
-func statusDot(status models.CoverStatus) fyne.CanvasObject {
-	dot := canvas.NewCircle(color.NRGBA{})
-	dot.StrokeColor = color.NRGBA{R: 10, G: 10, B: 10, A: 180}
-	dot.StrokeWidth = 1
-	applyStatusDot(dot, status)
-	return container.NewCenter(container.NewGridWrap(fyne.NewSize(14, 14), dot))
-}
-
-func applyStatusDot(dot *canvas.Circle, status models.CoverStatus) {
 	switch status {
 	case models.CoverStatusComplete:
-		dot.FillColor = color.NRGBA{R: 46, G: 204, B: 113, A: 255}
+		return visualStatus{fill: statusCompleteColor, tooltip: statusText}
 	case models.CoverStatusPartial:
-		dot.FillColor = color.NRGBA{R: 241, G: 196, B: 15, A: 255}
+		return visualStatus{fill: statusPartialColor, tooltip: statusText}
 	default:
-		dot.FillColor = color.NRGBA{R: 231, G: 76, B: 60, A: 255}
+		return visualStatus{fill: statusMissingColor, tooltip: statusText}
 	}
-	dot.Refresh()
 }
 
-func reachabilityDot(reachable bool) fyne.CanvasObject {
-	dot := canvas.NewCircle(color.NRGBA{R: 231, G: 76, B: 60, A: 255})
-	if reachable {
-		dot.FillColor = color.NRGBA{R: 46, G: 204, B: 113, A: 255}
+func visualStatusForSlot(slot models.CoverSlot) visualStatus {
+	if !slot.Exists {
+		return visualStatus{fill: statusMissingColor, tooltip: fmt.Sprintf("%s fehlt", slot.Label)}
 	}
-	dot.StrokeColor = color.NRGBA{R: 10, G: 10, B: 10, A: 180}
-	dot.StrokeWidth = 1
-	return container.NewCenter(container.NewGridWrap(fyne.NewSize(12, 12), dot))
+	if !slot.IsOptimized {
+		hint := slot.OptimizeHint
+		if hint == "" {
+			hint = "Optimierung verfügbar"
+		}
+		return visualStatus{fill: statusOptimizeColor, tooltip: fmt.Sprintf("%s: %s", slot.Label, hint)}
+	}
+	return visualStatus{fill: statusCompleteColor, tooltip: fmt.Sprintf("%s ist vorhanden und optimiert", slot.Label)}
+}
+
+func itemStatusText(item models.MediaItem) string {
+	count := unoptimizedCoverCount(item)
+	if count == 0 {
+		return item.StatusLabel()
+	}
+	if count == 1 {
+		return item.StatusLabel() + " · 1 Cover kann optimiert werden"
+	}
+	return fmt.Sprintf("%s · %d Cover können optimiert werden", item.StatusLabel(), count)
+}
+
+func unoptimizedCoverCount(item models.MediaItem) int {
+	count := 0
+	for _, slot := range item.CoverSlots {
+		if slot.Exists && !slot.IsOptimized {
+			count++
+		}
+	}
+	return count
+}
+
+func reachabilityStatus(reachable bool) visualStatus {
+	if reachable {
+		return visualStatus{fill: statusCompleteColor, tooltip: "Pfad erreichbar"}
+	}
+	return visualStatus{fill: statusMissingColor, tooltip: "Pfad nicht erreichbar"}
 }
