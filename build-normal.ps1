@@ -26,7 +26,7 @@ $env:CGO_ENABLED = "1"
 
 $appVersion = (Get-Content (Join-Path $root "VERSION") -Raw).Trim()
 if ($appVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.3. Aktuell: $appVersion"
+    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.4. Aktuell: $appVersion"
 }
 
 go run .\tools\icongen
@@ -48,8 +48,8 @@ Get-ChildItem $distDir -Filter "PlexCoverManager-v*.exe" -ErrorAction SilentlyCo
 Remove-Item -Force (Join-Path $root "PlexCoverManager.exe") -ErrorAction SilentlyContinue
 
 $output = Join-Path $distDir "PlexCoverManager-v$appVersion.exe"
-$ldflags = "-H windowsgui -extldflags '-static' -X plexcovermanager/appversion.Version=$appVersion"
-go build -mod=vendor -ldflags $ldflags -o $output .
+$ldflags = "-H windowsgui -s -w -X plexcovermanager/appversion.Version=$appVersion"
+go build -mod=vendor -trimpath -buildvcs=false -ldflags $ldflags -o $output .
 
 Remove-Item -Force $appSyso,$iconRc -ErrorAction SilentlyContinue
 

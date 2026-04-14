@@ -36,7 +36,7 @@ $env:CGO_ENABLED = "1"
 
 $appVersion = (Get-Content (Join-Path $root "VERSION") -Raw).Trim()
 if ($appVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.3. Aktuell: $appVersion"
+    Write-Error "VERSION muss semantisch aussehen, z.B. 0.0.4. Aktuell: $appVersion"
 }
 
 go run .\tools\icongen
@@ -57,8 +57,8 @@ Remove-Item -Recurse -Force $payloadDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
 
 $appPayload = Join-Path $payloadDir "PlexCoverManager.app.exe"
-$appLdflags = "-H windowsgui -extldflags '-static' -X plexcovermanager/appversion.Version=$appVersion"
-go build -mod=vendor -ldflags $appLdflags -o $appPayload .
+$appLdflags = "-H windowsgui -s -w -X plexcovermanager/appversion.Version=$appVersion"
+go build -mod=vendor -trimpath -buildvcs=false -ldflags $appLdflags -o $appPayload .
 
 $queue = [System.Collections.Generic.Queue[string]]::new()
 $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -108,8 +108,8 @@ Get-ChildItem $distDir -Filter "PlexCoverManager-v*-portable.exe" -ErrorAction S
 Remove-Item -Force (Join-Path $root "PlexCoverManager.exe") -ErrorAction SilentlyContinue
 
 $output = Join-Path $distDir "PlexCoverManager-v$appVersion-portable.exe"
-$ldflags = "-H windowsgui -extldflags '-static' -X main.payloadVersion=$payloadVersion -X main.appVersion=$appVersion"
-go build -mod=vendor -tags launcher -ldflags $ldflags -o $output .\cmd\launcher
+$ldflags = "-H windowsgui -s -w -X main.payloadVersion=$payloadVersion -X main.appVersion=$appVersion"
+go build -mod=vendor -tags launcher -trimpath -buildvcs=false -ldflags $ldflags -o $output .\cmd\launcher
 
 Remove-Item -Recurse -Force $payloadDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
