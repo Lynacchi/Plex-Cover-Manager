@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	xdraw "golang.org/x/image/draw"
@@ -214,6 +215,13 @@ func OriginalBackupDir() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("PCM_ORIGINALS_DIR")); dir != "" {
 		return filepath.Clean(dir), nil
 	}
+	if runtime.GOOS != "windows" {
+		dir, err := os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, "PlexCoverManager", "originals"), nil
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
@@ -392,5 +400,10 @@ func normalizeCompression(compression models.CompressionConfig) models.Compressi
 }
 
 func samePath(a, b string) bool {
-	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	left := filepath.Clean(a)
+	right := filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
 }

@@ -1,6 +1,6 @@
 # Plex Cover Manager Runtime
 
-Es gibt zwei Windows-Builds.
+Es gibt zwei Windows-Builds. Linux wird als natives Binary gebaut; der portable Mesa-Launcher ist Windows-spezifisch.
 
 ## Normal
 
@@ -36,3 +36,11 @@ powershell -ExecutionPolicy Bypass -File .\build-portable.ps1
 ```
 
 Die Release-Dateien landen unter `dist/`.
+
+Linux:
+
+```bash
+sh ./build-linux.sh
+```
+
+Der Linux-Build benoetigt CGO sowie die Fyne/GLFW-Systembibliotheken der jeweiligen Distribution.

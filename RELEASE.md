@@ -20,10 +20,20 @@ Portable Variante mit Mesa/OpenGL-Fallback:
 powershell -ExecutionPolicy Bypass -File .\build-portable.ps1
 ```
 
-Danach liegen in `dist/` zwei Dateien:
+Linux-Binary:
+
+```bash
+sh ./build-linux.sh
+```
+
+Die Windows-Builds erzeugen in `dist/`:
 
 - `PlexCoverManager-v0.2.0.exe`
 - `PlexCoverManager-v0.2.0-portable.exe`
+
+Der Linux-Build erzeugt z.B.:
+
+- `PlexCoverManager-v0.2.0-linux-amd64` (wenn der Linux-Build ausgefuehrt wurde)
 
 Die normale Variante ist fuer normale Windows-PCs gedacht. Die portable Variante ist fuer VMs, RDP, KVM-Server und Systeme ohne verlaessliches OpenGL gedacht.
 

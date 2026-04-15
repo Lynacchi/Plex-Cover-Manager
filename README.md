@@ -1,6 +1,6 @@
 ﻿# Plex Cover Manager
 
-Plex Cover Manager ist eine kleine Windows-Desktop-App zum Verwalten lokaler Plex-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben pruefen und Plex-konform in deiner Medienstruktur ablegen lassen.
+Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben pruefen und Plex-konform in deiner Medienstruktur ablegen lassen.
 
 ## Features
 
@@ -35,6 +35,8 @@ Die App benoetigt keine Installation. Einfach die passende EXE starten.
 
 ## Build
 
+### Windows
+
 Voraussetzungen:
 
 - Go
@@ -53,6 +55,26 @@ powershell -ExecutionPolicy Bypass -File .\build-portable.ps1
 ```
 
 Die fertigen Dateien landen ausschliesslich in `dist/`.
+
+### Linux
+
+Voraussetzungen:
+
+- Go in der Version aus `go.mod`
+- `gcc`, `pkg-config`
+- Fyne/GLFW-Systembibliotheken, z.B. unter Debian/Ubuntu:
+
+```bash
+sudo apt install gcc pkg-config libgl1-mesa-dev xorg-dev
+```
+
+Build:
+
+```bash
+sh ./build-linux.sh
+```
+
+Der Linux-Build erzeugt ein natives Binary in `dist/`. Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneroeffnen nutzt `xdg-open` oder `gio`.
 
 ## Version
 
@@ -76,4 +98,10 @@ Logs:
 
 ```text
 %APPDATA%\PlexCoverManager\
+```
+
+Unter Linux nutzt die App die Standardpfade von `os.UserConfigDir`, typischerweise:
+
+```text
+~/.config/PlexCoverManager/
 ```

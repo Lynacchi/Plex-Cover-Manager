@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"plexcovermanager/models"
@@ -151,6 +152,22 @@ func TestOriginalBackupDirCanBeOverriddenByLauncher(t *testing.T) {
 	}
 	if got != filepath.Clean(dir) {
 		t.Fatalf("OriginalBackupDir() = %q, want %q", got, filepath.Clean(dir))
+	}
+}
+
+func TestSamePathUsesPlatformCaseRules(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "Poster.jpg")
+	right := filepath.Join(dir, "poster.jpg")
+	got := samePath(left, right)
+	if runtime.GOOS == "windows" {
+		if !got {
+			t.Fatalf("samePath() = false on Windows, want true")
+		}
+		return
+	}
+	if got {
+		t.Fatalf("samePath() = true on %s, want false", runtime.GOOS)
 	}
 }
 

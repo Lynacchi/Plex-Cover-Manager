@@ -28,7 +28,7 @@ type ParsedCover struct {
 }
 
 func ParseCoverFile(path string) (ParsedCover, error) {
-	name := filepath.Base(path)
+	name := coverFileName(path)
 	ext := strings.ToLower(filepath.Ext(name))
 	if !supportedImageExtensions[ext] {
 		return ParsedCover{}, fmt.Errorf("nicht unterstütztes Format: %s", ext)
@@ -63,6 +63,17 @@ func ParseCoverFile(path string) (ParsedCover, error) {
 		SeasonNumber: seasonNumber,
 		Extension:    ext,
 	}, nil
+}
+
+func coverFileName(path string) string {
+	trimmed := strings.TrimRight(path, `/\`)
+	if trimmed == "" {
+		return filepath.Base(path)
+	}
+	if idx := strings.LastIndexAny(trimmed, `/\`); idx >= 0 {
+		return trimmed[idx+1:]
+	}
+	return filepath.Base(trimmed)
 }
 
 func splitSeasonTail(base string) (string, int, bool) {
