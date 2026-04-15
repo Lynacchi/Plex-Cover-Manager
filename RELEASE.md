@@ -26,6 +26,12 @@ Linux-Binary:
 sh ./build-linux.sh
 ```
 
+Oder aus Windows per Docker:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-linux-via-docker.ps1
+```
+
 Die Windows-Builds erzeugen in `dist/`:
 
 - `PlexCoverManager-v0.2.0.exe`

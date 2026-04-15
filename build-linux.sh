@@ -14,7 +14,7 @@ if [ "$goos" != "linux" ]; then
   exit 1
 fi
 
-version=$(tr -d '\r\n' < VERSION)
+version=$(tr -d '\r\n' < VERSION | sed 's/^\xef\xbb\xbf//')
 if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
   echo "VERSION muss semantisch aussehen, z.B. 0.2.0. Aktuell: $version" >&2
   exit 1

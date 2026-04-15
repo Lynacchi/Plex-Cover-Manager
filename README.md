@@ -74,6 +74,12 @@ Build:
 sh ./build-linux.sh
 ```
 
+Linux-Build aus Windows per Docker:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-linux-via-docker.ps1
+```
+
 Der Linux-Build erzeugt ein natives Binary in `dist/`. Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneroeffnen nutzt `xdg-open` oder `gio`.
 
 ## Version
