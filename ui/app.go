@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -274,6 +275,8 @@ func (a *Application) showMainList() {
 	diagnostics.Log("ui: show main list")
 	a.currentDetailID = ""
 	a.detailDropSlots = nil
+	cfg := a.config.Get()
+	posterDBEnabled := cfg.PosterDBSearchEnabled
 	title := widget.NewLabelWithStyle("Plex Cover Manager", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	search := widget.NewEntry()
@@ -325,25 +328,37 @@ func (a *Application) showMainList() {
 			titleLabel.Truncation = fyne.TextTruncateEllipsis
 			typeLabel := widget.NewLabel("Serie")
 			indicator := newStatusIndicator(visualStatusForCover(models.CoverStatusNone, 0, 0, "Kein Cover vorhanden"))
-			row := container.NewBorder(nil, nil, container.NewHBox(indicator, typeLabel), nil, titleLabel)
+			searchButton := widget.NewButtonWithIcon("", theme.SearchIcon(), nil)
+			searchButton.Hide()
+			row := container.NewBorder(nil, nil, container.NewHBox(indicator, typeLabel), searchButton, titleLabel)
 			return container.New(layout.NewCustomPaddedLayout(2, 2, 8, 8), row)
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			a.mu.RLock()
-			defer a.mu.RUnlock()
 			if id < 0 || id >= len(a.filtered) {
+				a.mu.RUnlock()
 				return
 			}
 			item := a.filtered[id]
+			a.mu.RUnlock()
 			padded := obj.(*fyne.Container)
 			row := padded.Objects[0].(*fyne.Container)
 			titleLabel := row.Objects[0].(*widget.Label)
 			leftBox := row.Objects[1].(*fyne.Container)
 			indicator := leftBox.Objects[0].(*statusIndicator)
 			typeLabel := leftBox.Objects[1].(*widget.Label)
+			searchButton := row.Objects[2].(*widget.Button)
 			indicator.SetStatus(visualStatusForItem(item))
 			typeLabel.SetText(item.TypeLabel())
 			titleLabel.SetText(item.Title)
+			if posterDBEnabled && shouldOfferPosterDBSearch(item) {
+				itemCopy := item
+				searchButton.OnTapped = func() { a.openPosterDBSearch(itemCopy) }
+				searchButton.Show()
+			} else {
+				searchButton.OnTapped = nil
+				searchButton.Hide()
+			}
 		},
 	)
 	a.list.HideSeparators = true
@@ -536,7 +551,16 @@ func (a *Application) showDetail(itemID string) {
 	refreshButton := widget.NewButton("Neu laden", func() {
 		a.refreshDetailItem(item.ID)
 	})
-	header := container.NewBorder(nil, nil, backButton, refreshButton, headerLine)
+	headerActions := container.NewHBox()
+	if cfg.PosterDBSearchEnabled && shouldOfferPosterDBSearch(item) {
+		itemCopy := item
+		posterDBButton := widget.NewButtonWithIcon("PosterDB", theme.SearchIcon(), func() {
+			a.openPosterDBSearch(itemCopy)
+		})
+		headerActions.Add(posterDBButton)
+	}
+	headerActions.Add(refreshButton)
+	header := container.NewBorder(nil, nil, backButton, headerActions, headerLine)
 
 	structure := widget.NewLabel(itemStructureText(item, cfg.ServerMode))
 	structure.Wrapping = fyne.TextWrapWord
@@ -985,6 +1009,15 @@ func (a *Application) showSettings() {
 		compressionBatchBox.Add(batchCompressButton)
 	}
 
+	// --- PosterDB search ---
+	posterDBCheck := widget.NewCheck("Suchbutton für theposterdb.com anzeigen (bei fehlenden Covern)", nil)
+	posterDBCheck.SetChecked(cfg.PosterDBSearchEnabled)
+	posterDBCheck.OnChanged = func(enabled bool) {
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.PosterDBSearchEnabled = enabled
+		})
+	}
+
 	// --- Config file ---
 	configPath := widget.NewLabel(fmt.Sprintf("Config: %s", a.config.Path()))
 	configPath.Wrapping = fyne.TextWrapWord
@@ -1013,6 +1046,9 @@ func (a *Application) showSettings() {
 		compressionCheck,
 		compressionControls,
 		compressionBatchBox,
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Poster-Suche", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		posterDBCheck,
 		widget.NewSeparator(),
 		configRow,
 	)
@@ -1368,6 +1404,30 @@ func renameableCoverCount(item models.MediaItem) int {
 		}
 	}
 	return count
+}
+
+func posterDBSearchURL(item models.MediaItem) string {
+	section := "shows"
+	if item.Type == models.MediaTypeMovie {
+		section = "movies"
+	}
+	params := url.Values{}
+	params.Set("term", item.Title)
+	params.Set("section", section)
+	return "https://theposterdb.com/search?" + params.Encode()
+}
+
+func shouldOfferPosterDBSearch(item models.MediaItem) bool {
+	return item.Status != models.CoverStatusComplete
+}
+
+func (a *Application) openPosterDBSearch(item models.MediaItem) {
+	if strings.TrimSpace(item.Title) == "" {
+		return
+	}
+	if err := openURLInBrowser(posterDBSearchURL(item)); err != nil {
+		dialog.ShowError(err, a.window)
+	}
 }
 
 func reachabilityStatus(reachable bool) visualStatus {

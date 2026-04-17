@@ -15,6 +15,7 @@ Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex-Poster
 - Komprimierungserkennung fuer zu grosse oder nicht als JPEG gespeicherte Cover
 - smarte Erkennung vorhandener Alias-Cover wie `folder.jpg`, `cover.jpg` oder heruntergeladene Staffelcover
 - optionales Umbenennen erkannter Alias-Cover auf den aktuellen Plex-/Jellyfin-Zielnamen
+- optionaler theposterdb.com-Suchbutton fuer Titel mit fehlenden Covern
 - Detail-Refresh fuer einzelne Titel ohne kompletten Bibliotheksscan
 - Filter fuer alle Titel, Filme oder Serien
 - SMB-/UNC-Pfade wie `\\Server\Share\Media`
@@ -25,10 +26,10 @@ Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex-Poster
 
 Releases enthalten zwei Windows-EXEs:
 
-- `PlexCoverManager-v0.2.0.exe`
+- `PlexCoverManager-v0.3.0.exe`
   Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-- `PlexCoverManager-v0.2.0-portable.exe`
+- `PlexCoverManager-v0.3.0-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die App benoetigt keine Installation. Einfach die passende EXE starten.

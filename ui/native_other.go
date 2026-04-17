@@ -40,6 +40,13 @@ func openFileWithDefault(filePath string) error {
 	)
 }
 
+func openURLInBrowser(rawURL string) error {
+	return startFirstAvailable(
+		nativeCommand{name: "xdg-open", args: []string{rawURL}},
+		nativeCommand{name: "gio", args: []string{"open", rawURL}},
+	)
+}
+
 func selectCoverFiles(multi bool) ([]string, error) {
 	zenityArgs := []string{
 		"--file-selection",

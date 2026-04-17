@@ -38,6 +38,10 @@ func openFileWithDefault(filePath string) error {
 	return shellExecute("open", filepath.FromSlash(filePath), "", "")
 }
 
+func openURLInBrowser(rawURL string) error {
+	return shellExecute("open", rawURL, "", "")
+}
+
 func shellExecute(verb, file, params, dir string) error {
 	result, _, err := nativeShellExecuteW.Call(
 		0,

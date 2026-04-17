@@ -49,10 +49,11 @@ type CompressionConfig struct {
 }
 
 type AppConfig struct {
-	ServerMode          ServerMode        `json:"server_mode"`
-	MediaPaths          []MediaPath       `json:"media_paths"`
-	Compression         CompressionConfig `json:"compression"`
-	OptimizeThresholdKB int               `json:"optimize_threshold_kb"`
+	ServerMode            ServerMode        `json:"server_mode"`
+	MediaPaths            []MediaPath       `json:"media_paths"`
+	Compression           CompressionConfig `json:"compression"`
+	OptimizeThresholdKB   int               `json:"optimize_threshold_kb"`
+	PosterDBSearchEnabled bool              `json:"posterdb_search_enabled"`
 }
 
 type CoverSlot struct {
@@ -107,7 +108,8 @@ func DefaultConfig() AppConfig {
 			MaxWidth:    1000,
 			MaxHeight:   1500,
 		},
-		OptimizeThresholdKB: 300,
+		OptimizeThresholdKB:   300,
+		PosterDBSearchEnabled: true,
 	}
 }
 
