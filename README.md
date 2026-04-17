@@ -30,10 +30,10 @@ Releases enthalten Windows- und Linux-Builds:
 ### Windows
 
 - `PlexCoverManager-v0.3.3.exe`
-  Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
+  Normale Variante. Kleiner und nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
 - `PlexCoverManager-v0.3.3-portable.exe`
-  Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
+  Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die Windows-App benoetigt keine Installation. Einfach die passende EXE starten.
 
