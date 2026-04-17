@@ -27,10 +27,10 @@ Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex-Poster
 
 Releases enthalten zwei Windows-EXEs:
 
-- `PlexCoverManager-v0.3.1.exe`
+- `PlexCoverManager-v0.3.2.exe`
   Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-- `PlexCoverManager-v0.3.1-portable.exe`
+- `PlexCoverManager-v0.3.2-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die App benoetigt keine Installation. Einfach die passende EXE starten.

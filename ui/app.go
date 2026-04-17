@@ -1029,8 +1029,7 @@ func (a *Application) showSettings() {
 	})
 	configRow := container.NewBorder(nil, nil, nil, openConfigFolderButton, configPath)
 
-	// --- Original backups ---
-	defaultBackupsDir, defaultBackupsErr := cover.OriginalBackupDir("")
+	// --- Original backups (part of compression) ---
 	effectiveBackupsDir, effectiveBackupsErr := cover.OriginalBackupDir(cfg.OriginalsPath)
 
 	backupsHeader := widget.NewLabelWithStyle("Originale (Backups bei Komprimierung)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
@@ -1098,19 +1097,15 @@ func (a *Application) showSettings() {
 	if strings.TrimSpace(cfg.OriginalsPath) == "" {
 		resetOriginalsButton.Disable()
 	}
-
-	defaultHintText := ""
-	if defaultBackupsErr != nil {
-		defaultHintText = fmt.Sprintf("Standard: nicht ermittelbar (%s)", defaultBackupsErr.Error())
-	} else {
-		defaultHintText = fmt.Sprintf("Standard: %s", defaultBackupsDir)
+	if cfg.Compression.Disabled {
+		originalsEntry.Disable()
+		browseOriginalsButton.Disable()
+		resetOriginalsButton.Disable()
+		openBackupsFolderButton.Disable()
 	}
-	defaultHint := widget.NewLabel(defaultHintText)
-	defaultHint.Wrapping = fyne.TextWrapWord
-	defaultHint.Selectable = true
 
 	pathEntryRow := container.NewBorder(nil, nil, nil, container.NewHBox(browseOriginalsButton, resetOriginalsButton), originalsEntry)
-	backupsBlock := container.NewVBox(backupsHeader, effectiveRow, pathEntryRow, defaultHint)
+	backupsBlock := container.NewVBox(backupsHeader, effectiveRow, pathEntryRow)
 
 	body := container.NewVBox(
 		widget.NewLabelWithStyle("Server-Typ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -1120,17 +1115,17 @@ func (a *Application) showSettings() {
 		pathsBox,
 		addPathButton,
 		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Poster-Suche", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		posterDBCheck,
+		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Komprimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		compressionCheck,
 		compressionControls,
 		compressionBatchBox,
-		widget.NewSeparator(),
-		widget.NewLabelWithStyle("Poster-Suche", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		posterDBCheck,
-		widget.NewSeparator(),
-		configRow,
-		widget.NewSeparator(),
 		backupsBlock,
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Konfiguration", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		configRow,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
 }
