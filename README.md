@@ -29,24 +29,24 @@ Releases enthalten Windows- und Linux-Builds:
 
 ### Windows
 
-- `PlexCoverManager-v0.3.2.exe`
+- `PlexCoverManager-v0.3.3.exe`
   Normale Variante. Kleiner, weniger antivirus-anfaellig, nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen fuer normale Desktop-PCs.
 
-- `PlexCoverManager-v0.3.2-portable.exe`
+- `PlexCoverManager-v0.3.3-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Groesser und eher antivirus-anfaellig, dafuer besser fuer VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die Windows-App benoetigt keine Installation. Einfach die passende EXE starten.
 
 ### Linux
 
-- `PlexCoverManager-v0.3.2-linux-amd64`
+- `PlexCoverManager-v0.3.3-linux-amd64`
   Natives Linux-Binary fuer x86_64/amd64-Systeme.
 
 Nach dem Download ausfuehrbar machen und starten:
 
 ```bash
-chmod +x PlexCoverManager-v0.3.2-linux-amd64
-./PlexCoverManager-v0.3.2-linux-amd64
+chmod +x PlexCoverManager-v0.3.3-linux-amd64
+./PlexCoverManager-v0.3.3-linux-amd64
 ```
 
 Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneroeffnen nutzt `xdg-open` oder `gio`.
@@ -108,7 +108,7 @@ Die aktuelle Version steht in:
 VERSION
 ```
 
-Fuer neue Releases die Version dort erhoehen, beide Builds ausfuehren und die Dateien aus `dist/` als GitHub Release Assets hochladen.
+Fuer neue Releases die Version dort erhoehen, Windows- und Linux-Builds ausfuehren und die Dateien aus `dist/` als GitHub Release Assets hochladen.
 
 ## Speicherorte
 

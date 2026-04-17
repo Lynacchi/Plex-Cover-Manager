@@ -3,7 +3,7 @@
 Dieses Projekt nutzt `VERSION` als zentrale Versionsquelle. Aktuell:
 
 ```text
-0.3.2
+0.3.3
 ```
 
 ## Builds
@@ -34,12 +34,12 @@ powershell -ExecutionPolicy Bypass -File .\build-linux-via-docker.ps1
 
 Die Windows-Builds erzeugen in `dist/`:
 
-- `PlexCoverManager-v0.3.2.exe`
-- `PlexCoverManager-v0.3.2-portable.exe`
+- `PlexCoverManager-v0.3.3.exe`
+- `PlexCoverManager-v0.3.3-portable.exe`
 
 Der Linux-Build erzeugt z.B.:
 
-- `PlexCoverManager-v0.3.2-linux-amd64` (wenn der Linux-Build ausgefuehrt wurde)
+- `PlexCoverManager-v0.3.3-linux-amd64` (wenn der Linux-Build ausgefuehrt wurde)
 
 Die normale Variante ist fuer normale Windows-PCs gedacht. Die portable Variante ist fuer VMs, RDP, KVM-Server und Systeme ohne verlaessliches OpenGL gedacht.
 
@@ -48,14 +48,15 @@ Die normale Variante ist fuer normale Windows-PCs gedacht. Die portable Variante
 1. Alle Quellcode-Aenderungen committen und pushen.
 2. Auf GitHub im Repository auf `Releases` gehen.
 3. `Create a new release` waehlen.
-4. Tag `v0.3.2` eintragen und erstellen lassen.
-5. Release title: `Plex Cover Manager v0.3.2`
-6. Beide Dateien aus `dist/` als Assets hochladen.
+4. Tag `v0.3.3` eintragen und erstellen lassen.
+5. Release title: `Plex Cover Manager v0.3.3`
+6. Alle Dateien aus `dist/` als Assets hochladen.
 7. Release notes kurz halten, z.B.:
 
 ```text
-Plex Cover Manager v0.3.2
+Plex Cover Manager v0.3.3
 
+- Windows builds include embedded version metadata in the EXE resources
 - Settings sections reordered for Poster search, compression, backups and configuration
 - Configurable originals backup folder for compression
 - Optional theposterdb.com search buttons for titles with missing covers
@@ -86,14 +87,15 @@ Plex Cover Manager v0.3.2
 Wenn GitHub CLI installiert ist:
 
 ```powershell
-git tag v0.3.2
+git tag v0.3.3
 git push origin main
-git push origin v0.3.2
-gh release create v0.3.2 `
-  .\dist\PlexCoverManager-v0.3.2.exe `
-  .\dist\PlexCoverManager-v0.3.2-portable.exe `
-  --title "Plex Cover Manager v0.3.2" `
-  --notes "Plex Cover Manager v0.3.2"
+git push origin v0.3.3
+gh release create v0.3.3 `
+  .\dist\PlexCoverManager-v0.3.3.exe `
+  .\dist\PlexCoverManager-v0.3.3-portable.exe `
+  .\dist\PlexCoverManager-v0.3.3-linux-amd64 `
+  --title "Plex Cover Manager v0.3.3" `
+  --notes "Plex Cover Manager v0.3.3"
 ```
 
-Die `.exe`-Dateien sollten nicht ins Repository committed werden. Sie gehoeren als Release Assets in GitHub Releases.
+Die Release-Dateien sollten nicht ins Repository committed werden. Sie gehoeren als Release Assets in GitHub Releases.

@@ -29,14 +29,59 @@ if ($appVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
     Write-Error "VERSION muss semantisch aussehen, z.B. 0.2.0. Aktuell: $appVersion"
 }
 
+function Write-WindowsResource {
+    param(
+        [Parameter(Mandatory = $true)] [string]$RcPath,
+        [Parameter(Mandatory = $true)] [string]$IconPath,
+        [Parameter(Mandatory = $true)] [string]$Version,
+        [Parameter(Mandatory = $true)] [string]$OriginalFilename
+    )
+    $numeric = ($Version -replace '-.*$', '') -split '\.'
+    $fileVersionNumeric = "$([int]$numeric[0]),$([int]$numeric[1]),$([int]$numeric[2]),0"
+    $year = (Get-Date).Year
+    $escapedIcon = $IconPath.Replace("\", "\\")
+    $content = @"
+#pragma code_page(65001)
+
+1 ICON "$escapedIcon"
+
+1 VERSIONINFO
+FILEVERSION     $fileVersionNumeric
+PRODUCTVERSION  $fileVersionNumeric
+FILEOS          0x40004L
+FILETYPE        0x1L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "Nakama Network"
+            VALUE "FileDescription",  "Verwaltet Cover/Poster für Plex- und Jellyfin-Medienbibliotheken"
+            VALUE "FileVersion",      "$Version"
+            VALUE "InternalName",     "PlexCoverManager"
+            VALUE "LegalCopyright",   "© $year Lynacchi / Nakama Network"
+            VALUE "OriginalFilename", "$OriginalFilename"
+            VALUE "ProductName",      "Plex Cover Manager"
+            VALUE "ProductVersion",   "$Version"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+"@
+    Set-Content -Path $RcPath -Value $content -Encoding UTF8
+}
+
 go run .\tools\icongen
 
 $appSyso = Join-Path $root "app_icon_windows.syso"
 $iconRc = Join-Path $root "icon_windows.rc"
-$iconPath = (Join-Path $root "assets\app.ico").Replace("\", "\\")
+$iconPath = Join-Path $root "assets\app.ico"
 Remove-Item -Force $appSyso,$iconRc -ErrorAction SilentlyContinue
-Set-Content -Path $iconRc -Value "1 ICON `"$iconPath`"" -Encoding ascii
-& $windres -i $iconRc -O coff -o $appSyso
+Write-WindowsResource -RcPath $iconRc -IconPath $iconPath -Version $appVersion -OriginalFilename "PlexCoverManager-v$appVersion.exe"
+& $windres --codepage=65001 -i $iconRc -O coff -o $appSyso
 
 go test -mod=vendor ./...
 
