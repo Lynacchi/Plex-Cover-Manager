@@ -1,6 +1,6 @@
 ﻿# Plex Cover Manager
 
-Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben pruefen und Plex-konform in deiner Medienstruktur ablegen lassen.
+Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex- und Jellyfin-Poster. Du kannst heruntergeladene Cover-Dateien importieren, vor dem Schreiben pruefen und passend fuer Plex oder Jellyfin in deiner Medienstruktur ablegen lassen.
 
 ## Features
 
