@@ -144,11 +144,12 @@ func copyFile(sourcePath, targetPath string) (ProcessResult, error) {
 }
 
 // CompressCover compresses an existing cover to JPEG, backing up the original first.
-func CompressCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig, normalizeName bool) (ProcessResult, error) {
+// originalsOverride (if non-empty) determines where originals are stored.
+func CompressCover(slot models.CoverSlot, itemTitle string, compression models.CompressionConfig, normalizeName bool, originalsOverride string) (ProcessResult, error) {
 	if !slot.Exists || slot.ExistingPath == "" {
 		return ProcessResult{}, fmt.Errorf("kein Cover vorhanden")
 	}
-	backupDir, err := OriginalBackupDir()
+	backupDir, err := OriginalBackupDir(originalsOverride)
 	if err != nil {
 		return ProcessResult{}, fmt.Errorf("Backup-Ordner nicht ermittelbar: %w", err)
 	}
@@ -210,8 +211,14 @@ func targetPathWithExistingExtension(slot models.CoverSlot) string {
 	return strings.TrimSuffix(slot.TargetPath, filepath.Ext(slot.TargetPath)) + ext
 }
 
-// OriginalBackupDir returns the directory next to the executable for storing originals.
-func OriginalBackupDir() (string, error) {
+// OriginalBackupDir returns the directory for storing original cover backups.
+// An explicit override (e.g. from config) takes precedence; otherwise the
+// PCM_ORIGINALS_DIR env var is consulted, and finally the platform default is
+// used (next to the executable on Windows, user config dir elsewhere).
+func OriginalBackupDir(override string) (string, error) {
+	if dir := strings.TrimSpace(override); dir != "" {
+		return filepath.Clean(dir), nil
+	}
 	if dir := strings.TrimSpace(os.Getenv("PCM_ORIGINALS_DIR")); dir != "" {
 		return filepath.Clean(dir), nil
 	}

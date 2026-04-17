@@ -54,6 +54,7 @@ type AppConfig struct {
 	Compression           CompressionConfig `json:"compression"`
 	OptimizeThresholdKB   int               `json:"optimize_threshold_kb"`
 	PosterDBSearchEnabled bool              `json:"posterdb_search_enabled"`
+	OriginalsPath         string            `json:"originals_path"`
 }
 
 type CoverSlot struct {
@@ -140,6 +141,10 @@ func (c *AppConfig) Normalize() {
 	}
 	if c.OptimizeThresholdKB <= 0 {
 		c.OptimizeThresholdKB = 300
+	}
+	c.OriginalsPath = strings.TrimSpace(c.OriginalsPath)
+	if c.OriginalsPath != "" {
+		c.OriginalsPath = filepath.Clean(c.OriginalsPath)
 	}
 	for i := range c.MediaPaths {
 		if c.MediaPaths[i].Type != MediaTypeMovie {

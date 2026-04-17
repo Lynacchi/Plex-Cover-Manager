@@ -662,7 +662,7 @@ func (a *Application) compressSingleCover(itemID, itemTitle string, slot models.
 	}
 	normalizeName := slot.NamingOK
 	go func() {
-		_, err := cover.CompressCover(slot, itemTitle, cfg.Compression, normalizeName)
+		_, err := cover.CompressCover(slot, itemTitle, cfg.Compression, normalizeName, cfg.OriginalsPath)
 		fyne.Do(func() {
 			if err != nil {
 				dialog.ShowError(err, a.window)
@@ -1027,12 +1027,90 @@ func (a *Application) showSettings() {
 			dialog.ShowError(err, a.window)
 		}
 	})
-	openConfigFileButton := widget.NewButton("Datei öffnen", func() {
-		if err := openFileWithDefault(a.config.Path()); err != nil {
+	configRow := container.NewBorder(nil, nil, nil, openConfigFolderButton, configPath)
+
+	// --- Original backups ---
+	defaultBackupsDir, defaultBackupsErr := cover.OriginalBackupDir("")
+	effectiveBackupsDir, effectiveBackupsErr := cover.OriginalBackupDir(cfg.OriginalsPath)
+
+	backupsHeader := widget.NewLabelWithStyle("Originale (Backups bei Komprimierung)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+	effectiveText := ""
+	if effectiveBackupsErr != nil {
+		effectiveText = fmt.Sprintf("Aktueller Pfad: nicht ermittelbar (%s)", effectiveBackupsErr.Error())
+	} else {
+		effectiveText = fmt.Sprintf("Aktueller Pfad: %s", effectiveBackupsDir)
+	}
+	effectiveLabel := widget.NewLabel(effectiveText)
+	effectiveLabel.Wrapping = fyne.TextWrapWord
+	effectiveLabel.Selectable = true
+
+	openBackupsFolderButton := widget.NewButton("Ordner öffnen", func() {
+		if effectiveBackupsErr != nil {
+			dialog.ShowError(effectiveBackupsErr, a.window)
+			return
+		}
+		if err := os.MkdirAll(effectiveBackupsDir, 0o755); err != nil {
+			dialog.ShowError(err, a.window)
+			return
+		}
+		if err := openFolderInExplorer(effectiveBackupsDir); err != nil {
 			dialog.ShowError(err, a.window)
 		}
 	})
-	configRow := container.NewBorder(nil, nil, nil, container.NewHBox(openConfigFolderButton, openConfigFileButton), configPath)
+	if effectiveBackupsErr != nil {
+		openBackupsFolderButton.Disable()
+	}
+	effectiveRow := container.NewBorder(nil, nil, nil, openBackupsFolderButton, effectiveLabel)
+
+	originalsEntry := widget.NewEntry()
+	originalsEntry.SetPlaceHolder("Leer = Standard verwenden")
+	originalsEntry.SetText(cfg.OriginalsPath)
+	originalsEntry.OnChanged = func(value string) {
+		trimmed := strings.TrimSpace(value)
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.OriginalsPath = trimmed
+		})
+	}
+	browseOriginalsButton := widget.NewButton("Durchsuchen...", func() {
+		go func() {
+			path, err := selectFolder()
+			fyne.Do(func() {
+				if err != nil {
+					dialog.ShowError(err, a.window)
+					return
+				}
+				if strings.TrimSpace(path) == "" {
+					return
+				}
+				originalsEntry.SetText(path)
+				a.showSettings()
+			})
+		}()
+	})
+	resetOriginalsButton := widget.NewButton("Standard verwenden", func() {
+		originalsEntry.SetText("")
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.OriginalsPath = ""
+		})
+		a.showSettings()
+	})
+	if strings.TrimSpace(cfg.OriginalsPath) == "" {
+		resetOriginalsButton.Disable()
+	}
+
+	defaultHintText := ""
+	if defaultBackupsErr != nil {
+		defaultHintText = fmt.Sprintf("Standard: nicht ermittelbar (%s)", defaultBackupsErr.Error())
+	} else {
+		defaultHintText = fmt.Sprintf("Standard: %s", defaultBackupsDir)
+	}
+	defaultHint := widget.NewLabel(defaultHintText)
+	defaultHint.Wrapping = fyne.TextWrapWord
+	defaultHint.Selectable = true
+
+	pathEntryRow := container.NewBorder(nil, nil, nil, container.NewHBox(browseOriginalsButton, resetOriginalsButton), originalsEntry)
+	backupsBlock := container.NewVBox(backupsHeader, effectiveRow, pathEntryRow, defaultHint)
 
 	body := container.NewVBox(
 		widget.NewLabelWithStyle("Server-Typ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -1051,6 +1129,8 @@ func (a *Application) showSettings() {
 		posterDBCheck,
 		widget.NewSeparator(),
 		configRow,
+		widget.NewSeparator(),
+		backupsBlock,
 	)
 	a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
 }
@@ -1158,7 +1238,7 @@ func (a *Application) batchCompress() {
 				compressed := 0
 				var failures []string
 				for _, job := range jobs {
-					if _, err := cover.CompressCover(job.slot, job.itemTitle, cfg.Compression, job.slot.NamingOK); err != nil {
+					if _, err := cover.CompressCover(job.slot, job.itemTitle, cfg.Compression, job.slot.NamingOK, cfg.OriginalsPath); err != nil {
 						failures = append(failures, fmt.Sprintf("%s (%s): %s", job.itemTitle, job.slot.Label, err.Error()))
 						continue
 					}

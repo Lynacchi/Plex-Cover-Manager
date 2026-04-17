@@ -146,12 +146,26 @@ func TestOriginalBackupDirCanBeOverriddenByLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PCM_ORIGINALS_DIR", dir)
 
-	got, err := OriginalBackupDir()
+	got, err := OriginalBackupDir("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != filepath.Clean(dir) {
 		t.Fatalf("OriginalBackupDir() = %q, want %q", got, filepath.Clean(dir))
+	}
+}
+
+func TestOriginalBackupDirConfigOverrideWinsOverEnv(t *testing.T) {
+	envDir := t.TempDir()
+	cfgDir := t.TempDir()
+	t.Setenv("PCM_ORIGINALS_DIR", envDir)
+
+	got, err := OriginalBackupDir(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(cfgDir) {
+		t.Fatalf("OriginalBackupDir(%q) = %q, want %q", cfgDir, got, filepath.Clean(cfgDir))
 	}
 }
 
@@ -185,7 +199,7 @@ func TestCompressCoverCanPreserveSmartAliasName(t *testing.T) {
 		Exists:       true,
 		NamingOK:     false,
 	}
-	if _, err := CompressCover(slot, "Example Movie", models.CompressionConfig{JPEGQuality: 85, MaxWidth: 1000, MaxHeight: 1500}, false); err != nil {
+	if _, err := CompressCover(slot, "Example Movie", models.CompressionConfig{JPEGQuality: 85, MaxWidth: 1000, MaxHeight: 1500}, false, ""); err != nil {
 		t.Fatalf("CompressCover() error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "folder.jpg")); err != nil {

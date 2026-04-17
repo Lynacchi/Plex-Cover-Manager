@@ -32,14 +32,6 @@ func openFileInExplorer(filePath string) error {
 	return openFolderInExplorer(filepath.Dir(filePath))
 }
 
-func openFileWithDefault(filePath string) error {
-	target := filepath.Clean(filePath)
-	return startFirstAvailable(
-		nativeCommand{name: "xdg-open", args: []string{target}},
-		nativeCommand{name: "gio", args: []string{"open", target}},
-	)
-}
-
 func openURLInBrowser(rawURL string) error {
 	return startFirstAvailable(
 		nativeCommand{name: "xdg-open", args: []string{rawURL}},

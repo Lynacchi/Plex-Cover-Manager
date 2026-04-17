@@ -34,10 +34,6 @@ func openFileInExplorer(filePath string) error {
 	return shellExecute("open", "explorer.exe", fmt.Sprintf(`/select,"%s"`, target), "")
 }
 
-func openFileWithDefault(filePath string) error {
-	return shellExecute("open", filepath.FromSlash(filePath), "", "")
-}
-
 func openURLInBrowser(rawURL string) error {
 	return shellExecute("open", rawURL, "", "")
 }
