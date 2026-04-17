@@ -1,10 +1,6 @@
-﻿# Release erstellen
+# Builds erstellen
 
-Dieses Projekt nutzt `VERSION` als zentrale Versionsquelle. Aktuell:
-
-```text
-0.3.3
-```
+Die Build-Skripte lesen die Versionsnummer aus `VERSION` und schreiben die fertigen Dateien nach `dist/`.
 
 ## Builds
 
@@ -39,63 +35,6 @@ Die Windows-Builds erzeugen in `dist/`:
 
 Der Linux-Build erzeugt z.B.:
 
-- `PlexCoverManager-v0.3.3-linux-amd64` (wenn der Linux-Build ausgefuehrt wurde)
+- `PlexCoverManager-v0.3.3-linux-amd64`
 
 Die normale Variante ist fuer normale Windows-PCs gedacht. Die portable Variante ist fuer VMs, RDP, KVM-Server und Systeme ohne verlaessliches OpenGL gedacht.
-
-## GitHub Release per Weboberflaeche
-
-1. Alle Quellcode-Aenderungen committen und pushen.
-2. Auf GitHub im Repository auf `Releases` gehen.
-3. `Create a new release` waehlen.
-4. Tag `v0.3.3` eintragen und erstellen lassen.
-5. Release title: `Plex Cover Manager v0.3.3`
-6. Alle Dateien aus `dist/` als Assets hochladen.
-7. Release notes kurz halten, z.B.:
-
-```text
-Plex Cover Manager v0.3.3
-
-- Windows builds include embedded version metadata in the EXE resources
-- Settings sections reordered for Poster search, compression, backups and configuration
-- Configurable originals backup folder for compression
-- Optional theposterdb.com search buttons for titles with missing covers
-- Normal build for regular Windows desktops
-- Portable Mesa build for VM/RDP/server environments
-- Plex/Jellyfin naming modes
-- Compression checks and optional disabled compression
-- Compact one-line list with status tooltips
-- Compact one-line detail header
-- Slot-targeted drag and drop in the detail view
-- Delayed status tooltips
-- Jellyfin flat-series fallback is now shown explicitly
-- Smart detection for existing alias cover names
-- Explicit rename action for alias covers
-- Static status tooltips after hover delay
-- Media-type filter for all/movie/series
-- Detail refresh for the selected title
-- Consistent compression wording and disabled compression actions
-- Manual slot imports show manual assignment instead of a match
-- Faster path adding for network shares
-- Plex poster import and preview workflow
-```
-
-8. `Publish release` klicken.
-
-## GitHub Release per CLI
-
-Wenn GitHub CLI installiert ist:
-
-```powershell
-git tag v0.3.3
-git push origin main
-git push origin v0.3.3
-gh release create v0.3.3 `
-  .\dist\PlexCoverManager-v0.3.3.exe `
-  .\dist\PlexCoverManager-v0.3.3-portable.exe `
-  .\dist\PlexCoverManager-v0.3.3-linux-amd64 `
-  --title "Plex Cover Manager v0.3.3" `
-  --notes "Plex Cover Manager v0.3.3"
-```
-
-Die Release-Dateien sollten nicht ins Repository committed werden. Sie gehoeren als Release Assets in GitHub Releases.

@@ -100,16 +100,6 @@ powershell -ExecutionPolicy Bypass -File .\build-linux-via-docker.ps1
 
 Der Linux-Build erzeugt ein natives Binary in `dist/`. Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneroeffnen nutzt `xdg-open` oder `gio`.
 
-## Version
-
-Die aktuelle Version steht in:
-
-```text
-VERSION
-```
-
-Fuer neue Releases die Version dort erhoehen, Windows- und Linux-Builds ausfuehren und die Dateien aus `dist/` als GitHub Release Assets hochladen.
-
 ## Speicherorte
 
 Konfiguration:
