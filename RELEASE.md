@@ -30,11 +30,13 @@ powershell -ExecutionPolicy Bypass -File .\build-linux-via-docker.ps1
 
 Die Windows-Builds erzeugen in `dist/`:
 
-- `PlexCoverManager-v0.3.3.exe`
-- `PlexCoverManager-v0.3.3-portable.exe`
+- `PlexCoverManager-v0.4.0.exe`
+- `PlexCoverManager-v0.4.0-portable.exe`
 
 Der Linux-Build erzeugt z.B.:
 
-- `PlexCoverManager-v0.3.3-linux-amd64`
+- `PlexCoverManager-v0.4.0-linux-amd64`
 
-Die normale Variante ist fuer normale Windows-PCs gedacht. Die portable Variante ist fuer VMs, RDP, KVM-Server und Systeme ohne verlaessliches OpenGL gedacht.
+Die normale Variante ist für normale Windows-PCs gedacht. Die portable Variante ist für VMs, RDP, KVM-Server und Systeme ohne verlässliches OpenGL gedacht.
+
+Die aktuelle Oberfläche enthält außerdem ein Cover-Backup und eine Ansicht für fehlende Cover.

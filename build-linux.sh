@@ -10,7 +10,7 @@ goos=${GOOS:-$(go env GOOS)}
 goarch=${GOARCH:-$(go env GOARCH)}
 
 if [ "$goos" != "linux" ]; then
-  echo "Linux-Build bitte auf Linux ausfuehren oder GOOS=linux mit passendem Linux-C-Toolchain setzen." >&2
+  echo "Linux-Build bitte auf Linux ausführen oder GOOS=linux mit passender Linux-C-Toolchain setzen." >&2
   exit 1
 fi
 

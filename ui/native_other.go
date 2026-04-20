@@ -42,7 +42,7 @@ func openURLInBrowser(rawURL string) error {
 func selectCoverFiles(multi bool) ([]string, error) {
 	zenityArgs := []string{
 		"--file-selection",
-		"--title=Cover auswaehlen",
+		"--title=Cover auswählen",
 		"--file-filter=Bilder | *.png *.jpg *.jpeg *.webp",
 	}
 	if multi {
@@ -64,10 +64,17 @@ func selectCoverFiles(multi bool) ([]string, error) {
 }
 
 func selectFolder() (string, error) {
+	return selectFolderWithTitle("Medienpfad auswählen")
+}
+
+func selectFolderWithTitle(title string) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		title = "Ordner auswählen"
+	}
 	if paths, handled, err := runDialogCommand("zenity",
 		"--file-selection",
 		"--directory",
-		"--title=Medienpfad auswaehlen",
+		"--title="+title,
 	); handled {
 		if err != nil || len(paths) == 0 {
 			return "", err
@@ -75,7 +82,7 @@ func selectFolder() (string, error) {
 		return paths[0], nil
 	}
 
-	if paths, handled, err := runDialogCommand("kdialog", "--getexistingdirectory", "."); handled {
+	if paths, handled, err := runDialogCommand("kdialog", "--title", title, "--getexistingdirectory", "."); handled {
 		if err != nil || len(paths) == 0 {
 			return "", err
 		}
@@ -99,7 +106,7 @@ func startFirstAvailable(commands ...nativeCommand) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("keines der benoetigten Tools wurde gefunden: %s", strings.Join(missing, ", "))
+	return fmt.Errorf("keines der benötigten Tools wurde gefunden: %s", strings.Join(missing, ", "))
 }
 
 func runDialogCommand(name string, args ...string) ([]string, bool, error) {

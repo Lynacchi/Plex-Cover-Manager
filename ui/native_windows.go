@@ -82,10 +82,17 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 }
 
 func selectFolder() (string, error) {
-	script := `
+	return selectFolderWithTitle("Medienpfad auswählen")
+}
+
+func selectFolderWithTitle(title string) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		title = "Ordner auswählen"
+	}
+	script := fmt.Sprintf(`
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
-$dialog.Title = 'Medienpfad auswählen'
+$dialog.Title = %q
 $dialog.CheckFileExists = $false
 $dialog.CheckPathExists = $true
 $dialog.ValidateNames = $false
@@ -99,7 +106,7 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
     [Console]::WriteLine([System.IO.Path]::GetDirectoryName($selected))
   }
 }
-`
+`, title)
 	paths, err := runPowerShellDialog(script)
 	if err != nil || len(paths) == 0 {
 		return "", err

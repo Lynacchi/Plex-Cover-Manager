@@ -23,11 +23,11 @@ var (
 )
 
 func ShowGraphicsError(err error) {
-	text := "Plex Cover Manager kann die grafische Oberflaeche nicht starten.\n\n" +
-		"Windows meldet, dass OpenGL nicht verfuegbar ist oder der Grafiktreiber es nicht unterstuetzt.\n\n" +
+	text := "Plex Cover Manager kann die grafische Oberfläche nicht starten.\n\n" +
+		"Windows meldet, dass OpenGL nicht verfügbar ist oder der Grafiktreiber es nicht unterstützt.\n\n" +
 		"Bitte installiere oder aktualisiere den Grafiktreiber. Auf Remote-Desktops oder sehr reduzierten Windows-Installationen kann OpenGL fehlen.\n\n" +
 		"Details: " + err.Error() + "\n\n" +
-		"Soll die Microsoft-Hilfeseite zum Aktualisieren von Treibern geoeffnet werden?"
+		"Soll die Microsoft-Hilfeseite zum Aktualisieren von Treibern geöffnet werden?"
 	title := "Plex Cover Manager - OpenGL fehlt"
 	result, _, _ := procMessageBoxW.Call(
 		0,

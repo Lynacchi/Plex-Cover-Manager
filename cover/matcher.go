@@ -130,9 +130,9 @@ func buildPlan(parsed ParsedCover, item models.MediaItem, slot models.CoverSlot,
 }
 
 func buildTargetedPlan(parsed ParsedCover, item models.MediaItem, slot models.CoverSlot) ImportPlan {
-	message := "Wird direkt in die ausgewÃ¤hlte Position Ã¼bernommen. Der Dateiname wird dafÃ¼r nicht ausgewertet."
+	message := "Wird direkt in die ausgewählte Position übernommen. Der Dateiname wird dafür nicht ausgewertet."
 	if slot.Exists {
-		message = "Wird direkt in die ausgewÃ¤hlte Position Ã¼bernommen und ersetzt das vorhandene Cover. Der Dateiname wird dafÃ¼r nicht ausgewertet."
+		message = "Wird direkt in die ausgewählte Position übernommen und ersetzt das vorhandene Cover. Der Dateiname wird dafür nicht ausgewertet."
 	}
 	return ImportPlan{
 		SourcePath:   parsed.SourcePath,
@@ -247,7 +247,7 @@ func missingSlotMessage(item models.MediaItem, parsed ParsedCover) string {
 		}
 		return fmt.Sprintf("%s hat keine erkannte Staffel S%02d mit Medien.", item.Title, parsed.SeasonNumber)
 	}
-	return "Kein Zielslot fÃ¼r dieses Cover gefunden."
+	return "Kein Zielslot für dieses Cover gefunden."
 }
 
 func NormalizeTitle(input string) string {

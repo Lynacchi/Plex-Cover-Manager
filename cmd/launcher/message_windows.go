@@ -25,7 +25,7 @@ var (
 
 func showError(text string, offerDriverHelp bool) {
 	if offerDriverHelp {
-		text += "\n\nSoll die Microsoft-Hilfeseite zum Aktualisieren von Treibern geoeffnet werden?"
+		text += "\n\nSoll die Microsoft-Hilfeseite zum Aktualisieren von Treibern geöffnet werden?"
 	}
 	flags := uintptr(mbIconError | mbSetForeground)
 	if offerDriverHelp {

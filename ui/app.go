@@ -26,6 +26,7 @@ import (
 
 	"plexcovermanager/appversion"
 	"plexcovermanager/assets"
+	"plexcovermanager/backend"
 	"plexcovermanager/config"
 	"plexcovermanager/cover"
 	"plexcovermanager/diagnostics"
@@ -1018,6 +1019,27 @@ func (a *Application) showSettings() {
 		})
 	}
 
+	// --- Backup and missing covers ---
+	backupReportBox := container.NewVBox()
+	backupCount := a.countExistingCovers()
+	backupLabel := widget.NewLabel(fmt.Sprintf("%d gefundene Cover/Poster können gesichert werden.", backupCount))
+	backupLabel.Wrapping = fyne.TextWrapWord
+	backupButton := widget.NewButton("Cover-Backup erstellen", a.startCoverBackup)
+	if backupCount == 0 {
+		backupButton.Disable()
+	}
+	missingSlots, missingItems := a.missingCoverStats()
+	missingLabel := widget.NewLabel(fmt.Sprintf("%d fehlende Cover in %d Titeln.", missingSlots, missingItems))
+	missingLabel.Wrapping = fyne.TextWrapWord
+	missingButton := widget.NewButton("Fehlende Cover anzeigen", a.showMissingCoverReport)
+	if missingSlots == 0 {
+		missingButton.Disable()
+	}
+	backupReportBox.Add(backupLabel)
+	backupReportBox.Add(backupButton)
+	backupReportBox.Add(missingLabel)
+	backupReportBox.Add(missingButton)
+
 	// --- Config file ---
 	configPath := widget.NewLabel(fmt.Sprintf("Config: %s", a.config.Path()))
 	configPath.Wrapping = fyne.TextWrapWord
@@ -1117,6 +1139,9 @@ func (a *Application) showSettings() {
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Poster-Suche", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		posterDBCheck,
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Backup und Fehlliste", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		backupReportBox,
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Komprimierung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		compressionCheck,
@@ -1249,6 +1274,141 @@ func (a *Application) batchCompress() {
 				})
 			}()
 		}, a.window).Show()
+}
+
+func (a *Application) startCoverBackup() {
+	items := a.itemsSnapshot()
+	if countExistingCoversInItems(items) == 0 {
+		dialog.ShowInformation("Cover-Backup", "Keine vorhandenen Cover zum Sichern gefunden.", a.window)
+		return
+	}
+	go func() {
+		path, err := selectFolderWithTitle("Backup-Zielordner auswählen")
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(err, a.window)
+				return
+			}
+			if strings.TrimSpace(path) == "" {
+				return
+			}
+			a.exportCoverBackup(items, path)
+		})
+	}()
+}
+
+func (a *Application) exportCoverBackup(items []models.MediaItem, destinationRoot string) {
+	progress := widget.NewProgressBarInfinite()
+	progress.Start()
+	progressLabel := widget.NewLabel("Cover werden kopiert ...")
+	progressDialog := dialog.NewCustomWithoutButtons("Cover-Backup", container.NewVBox(progressLabel, progress), a.window)
+	progressDialog.Resize(fyne.NewSize(420, 120))
+	progressDialog.Show()
+
+	go func() {
+		result, err := backend.ExportExistingCovers(items, destinationRoot)
+		fyne.Do(func() {
+			progress.Stop()
+			progressDialog.Hide()
+			if err != nil {
+				dialog.ShowError(err, a.window)
+				return
+			}
+			a.showCoverBackupResult(result)
+		})
+	}()
+}
+
+func (a *Application) showCoverBackupResult(result backend.CoverExportResult) {
+	message := fmt.Sprintf("%d Cover kopiert.\n\nOrdner: %s", result.Copied, result.OutputDir)
+	if len(result.Errors) > 0 {
+		message += fmt.Sprintf("\n\nFehler (%d):\n%s", len(result.Errors), formatErrorList(result.Errors, 8))
+	}
+	content := widget.NewLabel(message)
+	content.Wrapping = fyne.TextWrapWord
+	content.Selectable = true
+
+	resultDialog := dialog.NewCustomWithoutButtons("Cover-Backup abgeschlossen", content, a.window)
+	openButton := widget.NewButton("Ordner öffnen", func() {
+		if err := openFolderInExplorer(result.OutputDir); err != nil {
+			dialog.ShowError(err, a.window)
+		}
+	})
+	closeButton := widget.NewButton("Schließen", func() {
+		resultDialog.Hide()
+		a.refreshData("Scan läuft ...", func() { a.showSettings() })
+	})
+	resultDialog.SetButtons([]fyne.CanvasObject{openButton, closeButton})
+	resultDialog.Resize(fyne.NewSize(720, 320))
+	resultDialog.Show()
+}
+
+func (a *Application) showMissingCoverReport() {
+	items := a.itemsSnapshot()
+	report, missingSlots, missingItems := backend.BuildMissingCoverReport(items)
+	if missingSlots == 0 {
+		dialog.ShowInformation("Fehlende Cover", "Alle Cover sind vorhanden.", a.window)
+		return
+	}
+
+	summary := widget.NewLabel(fmt.Sprintf("%d fehlende Cover in %d Titeln.", missingSlots, missingItems))
+	summary.Wrapping = fyne.TextWrapWord
+	reportGrid := widget.NewTextGridFromString(report)
+	scroll := container.NewScroll(reportGrid)
+	scroll.SetMinSize(fyne.NewSize(760, 420))
+	copyStatus := widget.NewLabel("")
+	content := container.NewBorder(summary, copyStatus, nil, nil, scroll)
+
+	reportDialog := dialog.NewCustomWithoutButtons("Fehlende Cover", content, a.window)
+	copyButton := widget.NewButton("Kopieren", func() {
+		fyne.CurrentApp().Clipboard().SetContent(report)
+		copyStatus.SetText("In die Zwischenablage kopiert.")
+	})
+	closeButton := widget.NewButton("Schließen", func() {
+		reportDialog.Hide()
+	})
+	reportDialog.SetButtons([]fyne.CanvasObject{copyButton, closeButton})
+	reportDialog.Resize(fyne.NewSize(840, 560))
+	reportDialog.Show()
+}
+
+func (a *Application) countExistingCovers() int {
+	return countExistingCoversInItems(a.itemsSnapshot())
+}
+
+func (a *Application) missingCoverStats() (int, int) {
+	_, missingSlots, missingItems := backend.BuildMissingCoverReport(a.itemsSnapshot())
+	return missingSlots, missingItems
+}
+
+func (a *Application) itemsSnapshot() []models.MediaItem {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return append([]models.MediaItem(nil), a.items...)
+}
+
+func countExistingCoversInItems(items []models.MediaItem) int {
+	count := 0
+	for _, item := range items {
+		for _, slot := range item.CoverSlots {
+			if strings.TrimSpace(slot.ExistingPath) != "" {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func formatErrorList(errs []error, maxShown int) string {
+	lines := make([]string, 0, len(errs))
+	for i, err := range errs {
+		if i >= maxShown {
+			lines = append(lines, fmt.Sprintf("... und %d weitere Fehler", len(errs)-maxShown))
+			break
+		}
+		lines = append(lines, "- "+err.Error())
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (a *Application) settingsPathRow(index int, mediaPath models.MediaPath) fyne.CanvasObject {
@@ -1389,7 +1549,7 @@ func itemStructureText(item models.MediaItem, mode models.ServerMode) string {
 		labels = append(labels, season.DisplayLabel())
 	}
 	if item.FlatStructure {
-		text := fmt.Sprintf("Flat Structure: %d Staffel(n) aus Dateinamen erkannt: %s", len(labels), strings.Join(labels, ", "))
+		text := fmt.Sprintf("Flache Struktur: %d Staffel(n) aus Dateinamen erkannt: %s", len(labels), strings.Join(labels, ", "))
 		if mode == models.ServerModeJellyfin {
 			text += ". Jellyfin-Flat-Fallback: Staffelcover bleiben seasonXX-poster.jpg im Serienordner, weil ohne Staffelordner kein eindeutiges poster.jpg pro Staffel möglich ist."
 		}
