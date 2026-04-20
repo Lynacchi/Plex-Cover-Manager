@@ -1119,14 +1119,11 @@ func (a *Application) showSettings() {
 	if strings.TrimSpace(cfg.OriginalsPath) == "" {
 		resetOriginalsButton.Disable()
 	}
-	if cfg.Compression.Disabled {
-		originalsEntry.Disable()
-		browseOriginalsButton.Disable()
-		resetOriginalsButton.Disable()
-		openBackupsFolderButton.Disable()
-	}
 
 	pathEntryRow := container.NewBorder(nil, nil, nil, container.NewHBox(browseOriginalsButton, resetOriginalsButton), originalsEntry)
+	if cfg.Compression.Disabled {
+		pathEntryRow.Hide()
+	}
 	backupsBlock := container.NewVBox(backupsHeader, effectiveRow, pathEntryRow)
 
 	body := container.NewVBox(

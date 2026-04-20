@@ -31,24 +31,24 @@ Releases enthalten Windows- und Linux-Builds:
 
 ### Windows
 
-- `PlexCoverManager-v0.4.0.exe`
+- `PlexCoverManager-v0.4.1.exe`
   Normale Variante. Kleiner und nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen für normale Desktop-PCs.
 
-- `PlexCoverManager-v0.4.0-portable.exe`
+- `PlexCoverManager-v0.4.1-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Größer, dafür besser für VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die Windows-App benötigt keine Installation. Einfach die passende EXE starten.
 
 ### Linux
 
-- `PlexCoverManager-v0.4.0-linux-amd64`
+- `PlexCoverManager-v0.4.1-linux-amd64`
   Natives Linux-Binary für x86_64/amd64-Systeme.
 
 Nach dem Download ausführbar machen und starten:
 
 ```bash
-chmod +x PlexCoverManager-v0.4.0-linux-amd64
-./PlexCoverManager-v0.4.0-linux-amd64
+chmod +x PlexCoverManager-v0.4.1-linux-amd64
+./PlexCoverManager-v0.4.1-linux-amd64
 ```
 
 Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneröffnen nutzt `xdg-open` oder `gio`.
