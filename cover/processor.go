@@ -64,25 +64,16 @@ func ProcessCover(sourcePath, targetPath string, compression models.CompressionC
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return ProcessResult{}, err
 	}
-	tempFile, err := os.CreateTemp(filepath.Dir(targetPath), ".plex-cover-*.jpg")
+	tempPath, err := encodeProcessedCover(processed, targetPath, compressionConfig)
 	if err != nil {
 		return ProcessResult{}, err
 	}
-	tempPath := tempFile.Name()
 	cleanupTemp := true
 	defer func() {
 		if cleanupTemp {
 			_ = os.Remove(tempPath)
 		}
 	}()
-
-	if err := jpeg.Encode(tempFile, processed, &jpeg.Options{Quality: compressionConfig.JPEGQuality}); err != nil {
-		_ = tempFile.Close()
-		return ProcessResult{}, err
-	}
-	if err := tempFile.Close(); err != nil {
-		return ProcessResult{}, err
-	}
 
 	if err := replaceFile(tempPath, targetPath); err != nil {
 		return ProcessResult{}, err
@@ -99,6 +90,74 @@ func ProcessCover(sourcePath, targetPath string, compression models.CompressionC
 		Height:    bounds.Dy(),
 		SizeBytes: info.Size(),
 	}, nil
+}
+
+func encodeProcessedCover(processed image.Image, targetPath string, compression models.CompressionConfig) (string, error) {
+	quality := compression.JPEGQuality
+	targetBytes := int64(compression.TargetSizeKB) * 1024
+	if compression.ReduceQualityToTarget && targetBytes > 0 {
+		return encodeJPEGUnderTarget(processed, targetPath, quality, targetBytes)
+	}
+	return encodeJPEGTemp(processed, targetPath, quality)
+}
+
+func encodeJPEGUnderTarget(processed image.Image, targetPath string, initialQuality int, targetBytes int64) (string, error) {
+	bestPath := ""
+	bestSize := int64(0)
+	for quality := initialQuality; quality >= 60; quality -= 5 {
+		tempPath, err := encodeJPEGTemp(processed, targetPath, quality)
+		if err != nil {
+			if bestPath != "" {
+				_ = os.Remove(bestPath)
+			}
+			return "", err
+		}
+		info, err := os.Stat(tempPath)
+		if err != nil {
+			_ = os.Remove(tempPath)
+			if bestPath != "" {
+				_ = os.Remove(bestPath)
+			}
+			return "", err
+		}
+		if bestPath == "" || info.Size() < bestSize {
+			if bestPath != "" {
+				_ = os.Remove(bestPath)
+			}
+			bestPath = tempPath
+			bestSize = info.Size()
+		} else {
+			_ = os.Remove(tempPath)
+		}
+		if bestSize <= targetBytes {
+			return bestPath, nil
+		}
+	}
+	return bestPath, nil
+}
+
+func encodeJPEGTemp(processed image.Image, targetPath string, quality int) (string, error) {
+	tempFile, err := os.CreateTemp(filepath.Dir(targetPath), ".plex-cover-*.jpg")
+	if err != nil {
+		return "", err
+	}
+	tempPath := tempFile.Name()
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := jpeg.Encode(tempFile, processed, &jpeg.Options{Quality: quality}); err != nil {
+		_ = tempFile.Close()
+		return "", err
+	}
+	if err := tempFile.Close(); err != nil {
+		return "", err
+	}
+	cleanupTemp = false
+	return tempPath, nil
 }
 
 func copyFile(sourcePath, targetPath string) (ProcessResult, error) {
@@ -302,7 +361,7 @@ func RenameCoversForModeSwitch(items []models.MediaItem, toMode models.ServerMod
 			if toMode == models.ServerModeJellyfin {
 				newBase = "poster"
 			} else {
-				newBase = fmt.Sprintf("season%02d-poster", slot.SeasonNumber)
+				newBase = plexSeasonPosterBase(slot.SeasonNumber)
 			}
 			newPath := filepath.Join(dir, newBase+ext)
 			if samePath(slot.ExistingPath, newPath) {
@@ -320,6 +379,13 @@ func RenameCoversForModeSwitch(items []models.MediaItem, toMode models.ServerMod
 		}
 	}
 	return renamed, errs
+}
+
+func plexSeasonPosterBase(season int) string {
+	if season == 0 {
+		return "season-specials-poster"
+	}
+	return fmt.Sprintf("season%02d-poster", season)
 }
 
 func decodeImage(path string) (image.Image, error) {

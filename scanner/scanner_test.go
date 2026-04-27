@@ -42,6 +42,80 @@ func TestScanLibrarySeriesSeasonFolders(t *testing.T) {
 	if len(item.CoverSlots) != 3 {
 		t.Fatalf("len(slots) = %d", len(item.CoverSlots))
 	}
+	var specialsSlot models.CoverSlot
+	for _, slot := range item.CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 0 {
+			specialsSlot = slot
+		}
+	}
+	if got, want := specialsSlot.TargetPath, filepath.Join(specialsDir, "season-specials-poster.jpg"); got != want {
+		t.Fatalf("specials TargetPath = %q, want %q", got, want)
+	}
+}
+
+func TestScanLibrarySpecialsPosterName(t *testing.T) {
+	root := t.TempDir()
+	showDir := filepath.Join(root, "Example Show (2024)")
+	specialsDir := filepath.Join(showDir, "Specials")
+	mustMkdir(t, specialsDir)
+	mustWrite(t, filepath.Join(specialsDir, "Example.Show.S00E01.mkv"))
+	mustWrite(t, filepath.Join(specialsDir, "season-specials-poster.png"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeSeries}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	var specialsSlot models.CoverSlot
+	for _, slot := range items[0].CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 0 {
+			specialsSlot = slot
+		}
+	}
+	if !specialsSlot.Exists || !specialsSlot.NamingOK {
+		t.Fatalf("specials slot = %#v", specialsSlot)
+	}
+	if got, want := specialsSlot.TargetPath, filepath.Join(specialsDir, "season-specials-poster.jpg"); got != want {
+		t.Fatalf("TargetPath = %q, want %q", got, want)
+	}
+}
+
+func TestScanLibraryLegacySeason00SpecialsPosterIsRenameCandidate(t *testing.T) {
+	root := t.TempDir()
+	showDir := filepath.Join(root, "Example Show (2024)")
+	specialsDir := filepath.Join(showDir, "Specials")
+	mustMkdir(t, specialsDir)
+	mustWrite(t, filepath.Join(specialsDir, "Example.Show.S00E01.mkv"))
+	mustWrite(t, filepath.Join(specialsDir, "season00-poster.png"))
+
+	items, warnings := ScanLibrary(t.Context(), models.AppConfig{
+		MediaPaths: []models.MediaPath{{Path: root, Type: models.MediaTypeSeries}},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	var specialsSlot models.CoverSlot
+	for _, slot := range items[0].CoverSlots {
+		if slot.Kind == models.CoverKindSeason && slot.SeasonNumber == 0 {
+			specialsSlot = slot
+		}
+	}
+	if !specialsSlot.Exists || specialsSlot.NamingOK {
+		t.Fatalf("specials slot = %#v", specialsSlot)
+	}
+	if got, want := filepath.Base(specialsSlot.ExistingPath), "season00-poster.png"; got != want {
+		t.Fatalf("ExistingPath base = %q, want %q", got, want)
+	}
+	if !strings.Contains(specialsSlot.NamingHint, "season-specials-poster.png") {
+		t.Fatalf("NamingHint = %q", specialsSlot.NamingHint)
+	}
 }
 
 func TestScanLibraryFlatMovie(t *testing.T) {

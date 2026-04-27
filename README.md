@@ -8,9 +8,10 @@ Plex Cover Manager ist eine kleine Desktop-App zum Verwalten lokaler Plex- und J
 - fehlende, teilweise vorhandene und vollständige Cover anzeigen
 - Batch-Import mehrerer Cover-Dateien
 - Preview vor jedem Schreibvorgang
-- Plex-konforme Dateinamen wie `poster.jpg` und `season01-poster.jpg`
+- Plex-konforme Dateinamen wie `poster.jpg`, `season01-poster.jpg` und `season-specials-poster.jpg`
 - Jellyfin-Modus mit `poster.jpg` in Staffelordnern und `seasonXX-poster.jpg` als Flat-Fallback
 - JPEG-Komprimierung mit konfigurierbarer Qualität und Maximalauflösung
+- optionale Qualitätsreduzierung bis zum konfigurierten Komprimierungs-Schwellwert
 - optional deaktivierbare Komprimierung
 - Komprimierungserkennung für zu große oder nicht als JPEG gespeicherte Cover
 - konfigurierbarer Speicherort für Original-Backups bei Komprimierung
@@ -31,25 +32,27 @@ Releases enthalten Windows- und Linux-Builds:
 
 ### Windows
 
-- `PlexCoverManager-v0.4.1.exe`
+- `PlexCoverManager-v0.4.3.exe`
   Normale Variante. Kleiner und nutzt den vorhandenen Windows-Grafiktreiber. Empfohlen für normale Desktop-PCs.
 
-- `PlexCoverManager-v0.4.1-portable.exe`
+- `PlexCoverManager-v0.4.3-portable.exe`
   Portable Variante mit eingebettetem Mesa/OpenGL-Fallback. Größer, dafür besser für VMs, RDP-Sitzungen, KVM-Server und Systeme ohne brauchbares OpenGL.
 
 Die Windows-App benötigt keine Installation. Einfach die passende EXE starten.
 
 ### Linux
 
-- `PlexCoverManager-v0.4.1-linux-amd64`
+- `PlexCoverManager-v0.4.3-linux-amd64`
   Natives Linux-Binary für x86_64/amd64-Systeme.
 
 Nach dem Download ausführbar machen und starten:
 
 ```bash
-chmod +x PlexCoverManager-v0.4.1-linux-amd64
-./PlexCoverManager-v0.4.1-linux-amd64
+chmod +x PlexCoverManager-v0.4.3-linux-amd64
+./PlexCoverManager-v0.4.3-linux-amd64
 ```
+
+Für ein Menü-/Launcher-Icon unter Linux liegen zusätzlich `plex-cover-manager.png`, eine `.desktop`-Datei und `install-linux-desktop.sh` in `dist/`.
 
 Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneröffnen nutzt `xdg-open` oder `gio`.
 

@@ -58,6 +58,61 @@ func TestProcessCoverResizesAndWritesJPEG(t *testing.T) {
 	}
 }
 
+func TestProcessCoverCanReduceQualityToTargetSize(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.png")
+	standardTarget := filepath.Join(dir, "standard.jpg")
+	target := filepath.Join(dir, "poster.jpg")
+	writeDetailedTestPNG(t, source)
+
+	standard, err := ProcessCover(source, standardTarget, models.CompressionConfig{JPEGQuality: 95, MaxWidth: 800, MaxHeight: 800})
+	if err != nil {
+		t.Fatalf("standard ProcessCover() error = %v", err)
+	}
+	thresholdKB := int(standard.SizeBytes/1024) - 4
+	if thresholdKB < 1 {
+		t.Fatalf("standard output too small for target-size test: %d", standard.SizeBytes)
+	}
+
+	result, err := ProcessCover(source, target, models.CompressionConfig{
+		JPEGQuality:           95,
+		MaxWidth:              800,
+		MaxHeight:             800,
+		ReduceQualityToTarget: true,
+		TargetSizeKB:          thresholdKB,
+	})
+	if err != nil {
+		t.Fatalf("ProcessCover() error = %v", err)
+	}
+	if result.SizeBytes >= standard.SizeBytes {
+		t.Fatalf("reduced size = %d, standard size = %d", result.SizeBytes, standard.SizeBytes)
+	}
+	if result.SizeBytes > int64(thresholdKB)*1024 {
+		t.Fatalf("reduced size = %d, threshold = %d KB", result.SizeBytes, thresholdKB)
+	}
+}
+
+func TestProcessCoverKeepsBestEffortWhenTargetSizeCannotBeReached(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.png")
+	target := filepath.Join(dir, "poster.jpg")
+	writeDetailedTestPNG(t, source)
+
+	result, err := ProcessCover(source, target, models.CompressionConfig{
+		JPEGQuality:           95,
+		MaxWidth:              800,
+		MaxHeight:             800,
+		ReduceQualityToTarget: true,
+		TargetSizeKB:          1,
+	})
+	if err != nil {
+		t.Fatalf("ProcessCover() error = %v", err)
+	}
+	if result.SizeBytes <= 0 {
+		t.Fatalf("SizeBytes = %d", result.SizeBytes)
+	}
+}
+
 func TestApplyImportPlanDisabledCopiesSourceAndPreservesExtension(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "source.png")
@@ -139,6 +194,38 @@ func TestRenameCoversForModeSwitch(t *testing.T) {
 	}
 	if _, err := os.Stat(plexCover); err != nil {
 		t.Fatalf("plex cover missing: %v", err)
+	}
+}
+
+func TestRenameCoversForModeSwitchUsesSpecialsPosterNameForPlex(t *testing.T) {
+	dir := t.TempDir()
+	specialsDir := filepath.Join(dir, "Specials")
+	if err := os.MkdirAll(specialsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jellyfinCover := filepath.Join(specialsDir, "poster.png")
+	if err := os.WriteFile(jellyfinCover, []byte("cover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	item := models.MediaItem{
+		Type: models.MediaTypeSeries,
+		CoverSlots: []models.CoverSlot{
+			{
+				Kind:         models.CoverKindSeason,
+				SeasonNumber: 0,
+				ExistingPath: jellyfinCover,
+				Exists:       true,
+			},
+		},
+	}
+
+	renamed, errs := RenameCoversForModeSwitch([]models.MediaItem{item}, models.ServerModePlex)
+	if renamed != 1 || len(errs) != 0 {
+		t.Fatalf("renamed = %d, errs = %#v", renamed, errs)
+	}
+	plexCover := filepath.Join(specialsDir, "season-specials-poster.png")
+	if _, err := os.Stat(plexCover); err != nil {
+		t.Fatalf("plex specials cover missing: %v", err)
 	}
 }
 
@@ -247,6 +334,32 @@ func writeTestPNG(t *testing.T, path string) {
 	for y := 0; y < 96; y++ {
 		for x := 0; x < 64; x++ {
 			img.Set(x, y, color.RGBA{R: 80, G: 120, B: 180, A: 255})
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, img); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeDetailedTestPNG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 800, 800))
+	for y := 0; y < 800; y++ {
+		for x := 0; x < 800; x++ {
+			img.Set(x, y, color.RGBA{
+				R: uint8((x*y + y) % 256),
+				G: uint8((x*3 + y*7) % 256),
+				B: uint8((x*11 + y*5) % 256),
+				A: 255,
+			})
 		}
 	}
 	file, err := os.Create(path)

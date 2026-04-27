@@ -430,7 +430,7 @@ func seasonCoverSlot(dir, title string, season int, mode models.ServerMode, isFl
 		applyCoverMatch(&slot, match)
 		return slot
 	}
-	base := fmt.Sprintf("season%02d-poster", season)
+	base := plexSeasonPosterBase(season)
 	match := findExistingCover(dir, coverNameCandidates(base), seasonSmartCoverCandidates(title, season, !isFlat, true), parsedSeasonCoverMatcher(title, season))
 	slot := models.CoverSlot{
 		Key:          models.SeasonSlotKey(season),
@@ -519,6 +519,7 @@ func titleCoverBases(title string, seasonSpecific bool, season ...int) []string 
 func seasonCoverBases(season int) []string {
 	if season == 0 {
 		return []string{
+			"season-specials-poster",
 			"season00-poster",
 			"season0-poster",
 			"s00-poster",
@@ -544,6 +545,13 @@ func seasonCoverBases(season int) []string {
 		fmt.Sprintf("s%02d", season),
 		fmt.Sprintf("s%d", season),
 	}
+}
+
+func plexSeasonPosterBase(season int) string {
+	if season == 0 {
+		return "season-specials-poster"
+	}
+	return fmt.Sprintf("season%02d-poster", season)
 }
 
 func coverCandidatesForBases(bases ...string) []string {

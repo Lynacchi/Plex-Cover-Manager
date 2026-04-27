@@ -28,4 +28,47 @@ go build -mod=vendor -trimpath -buildvcs=false \
   -ldflags "-s -w -X plexcovermanager/appversion.Version=$version" \
   -o "$output" .
 
+icon_output="dist/plex-cover-manager.png"
+desktop_output="dist/PlexCoverManager-v${version}-linux-${goarch}.desktop"
+install_output="dist/install-linux-desktop.sh"
+
+cp assets/app.png "$icon_output"
+cat > "$desktop_output" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Plex Cover Manager
+Comment=Manage local Plex and Jellyfin poster files
+Exec=PlexCoverManager-v${version}-linux-${goarch}
+Icon=plex-cover-manager
+Terminal=false
+Categories=AudioVideo;Utility;
+EOF
+
+cat > "$install_output" <<EOF
+#!/usr/bin/env sh
+set -eu
+
+script_dir=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
+bin_dir="\$HOME/.local/bin"
+icon_dir="\$HOME/.local/share/icons/hicolor/256x256/apps"
+desktop_dir="\$HOME/.local/share/applications"
+
+mkdir -p "\$bin_dir" "\$icon_dir" "\$desktop_dir"
+cp "\$script_dir/PlexCoverManager-v${version}-linux-${goarch}" "\$bin_dir/PlexCoverManager"
+cp "\$script_dir/plex-cover-manager.png" "\$icon_dir/plex-cover-manager.png"
+cp "\$script_dir/PlexCoverManager-v${version}-linux-${goarch}.desktop" "\$desktop_dir/plex-cover-manager.desktop"
+chmod +x "\$bin_dir/PlexCoverManager"
+sed -i "s|^Exec=.*|Exec=\$bin_dir/PlexCoverManager|" "\$desktop_dir/plex-cover-manager.desktop"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "\$desktop_dir" >/dev/null 2>&1 || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache "\$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+fi
+
+echo "Installiert: \$desktop_dir/plex-cover-manager.desktop"
+EOF
+chmod +x "$install_output"
+
 echo "Fertig: $output"

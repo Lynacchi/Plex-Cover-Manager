@@ -878,11 +878,40 @@ func (a *Application) applyPlans(plans []cover.ImportPlan, after func()) {
 			if len(failures) > 0 {
 				dialog.ShowInformation("Import abgeschlossen", fmt.Sprintf("%d Cover übernommen.\n\nFehler:\n%s", applied, strings.Join(failures, "\n")), a.window)
 			} else {
-				dialog.ShowInformation("Import abgeschlossen", fmt.Sprintf("%d Cover übernommen.", applied), a.window)
+				a.showToast(fmt.Sprintf("%d Cover übernommen.", applied), 3*time.Second)
 			}
 			a.refreshData("Scan läuft ...", after)
 		})
 	}()
+}
+
+func (a *Application) showToast(message string, duration time.Duration) {
+	if a.window == nil || strings.TrimSpace(message) == "" {
+		return
+	}
+	label := widget.NewLabel(message)
+	label.Alignment = fyne.TextAlignCenter
+	label.Wrapping = fyne.TextWrapWord
+	background := canvas.NewRectangle(color.NRGBA{R: 34, G: 40, B: 49, A: 245})
+	content := container.NewStack(background, container.New(layout.NewCustomPaddedLayout(8, 8, 16, 16), label))
+	popup := widget.NewPopUp(content, a.window.Canvas())
+	width := float32(320)
+	min := content.MinSize()
+	if min.Width > width {
+		width = min.Width
+	}
+	popup.Resize(fyne.NewSize(width, min.Height))
+	canvasSize := a.window.Canvas().Size()
+	x := (canvasSize.Width - width) / 2
+	if x < 12 {
+		x = 12
+	}
+	popup.ShowAtPosition(fyne.NewPos(x, 14))
+	time.AfterFunc(duration, func() {
+		fyne.Do(func() {
+			popup.Hide()
+		})
+	})
 }
 
 func (a *Application) showSettings() {
@@ -979,6 +1008,17 @@ func (a *Application) showSettings() {
 		container.NewBorder(nil, nil, widget.NewLabel("Max. Höhe"), nil, heightEntry),
 	))
 	compressionControls.Add(container.NewBorder(nil, nil, widget.NewLabel("Komprimierungs-Schwellwert (KB)"), nil, thresholdEntry))
+	targetSizeCheck := widget.NewCheck("Qualität automatisch bis zum Schwellwert reduzieren", nil)
+	targetSizeCheck.SetChecked(cfg.Compression.ReduceQualityToTarget)
+	targetSizeCheck.OnChanged = func(enabled bool) {
+		a.saveConfig(func(cfg *models.AppConfig) {
+			cfg.Compression.ReduceQualityToTarget = enabled
+		})
+	}
+	targetSizeHint := widget.NewLabel("Kodiert aus dem verfügbaren Quellbild neu und senkt die JPEG-Qualität schrittweise bis maximal auf 60.")
+	targetSizeHint.Wrapping = fyne.TextWrapWord
+	compressionControls.Add(targetSizeCheck)
+	compressionControls.Add(targetSizeHint)
 
 	compressionCheck := widget.NewCheck("Komprimierung aktiviert", nil)
 	compressionCheck.SetChecked(!cfg.Compression.Disabled)

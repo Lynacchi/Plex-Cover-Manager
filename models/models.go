@@ -42,10 +42,12 @@ type MediaPath struct {
 }
 
 type CompressionConfig struct {
-	Disabled    bool `json:"disabled"`
-	JPEGQuality int  `json:"jpeg_quality"`
-	MaxWidth    int  `json:"max_width"`
-	MaxHeight   int  `json:"max_height"`
+	Disabled              bool `json:"disabled"`
+	JPEGQuality           int  `json:"jpeg_quality"`
+	MaxWidth              int  `json:"max_width"`
+	MaxHeight             int  `json:"max_height"`
+	ReduceQualityToTarget bool `json:"reduce_quality_to_target"`
+	TargetSizeKB          int  `json:"-"`
 }
 
 type AppConfig struct {
@@ -142,6 +144,7 @@ func (c *AppConfig) Normalize() {
 	if c.OptimizeThresholdKB <= 0 {
 		c.OptimizeThresholdKB = 300
 	}
+	c.Compression.TargetSizeKB = c.OptimizeThresholdKB
 	c.OriginalsPath = strings.TrimSpace(c.OriginalsPath)
 	if c.OriginalsPath != "" {
 		c.OriginalsPath = filepath.Clean(c.OriginalsPath)
