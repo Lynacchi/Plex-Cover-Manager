@@ -24,6 +24,7 @@ go test -mod=vendor ./...
 
 mkdir -p dist
 output="dist/PlexCoverManager-v${version}-linux-${goarch}"
+rm -rf "$output"
 go build -mod=vendor -trimpath -buildvcs=false \
   -ldflags "-s -w -X plexcovermanager/appversion.Version=$version" \
   -o "$output" .
@@ -32,7 +33,8 @@ icon_output="dist/plex-cover-manager.png"
 desktop_output="dist/PlexCoverManager-v${version}-linux-${goarch}.desktop"
 install_output="dist/install-linux-desktop.sh"
 package_name="PlexCoverManager-v${version}-linux-${goarch}"
-package_dir="dist/${package_name}"
+package_root="dist/.package-${package_name}"
+package_dir="${package_root}/${package_name}"
 package_output="dist/${package_name}.tar.gz"
 
 cp assets/app.png "$icon_output"
@@ -74,14 +76,14 @@ echo "Installiert: \$desktop_dir/plex-cover-manager.desktop"
 EOF
 chmod +x "$install_output"
 
-rm -rf "$package_dir" "$package_output"
+rm -rf "$package_root" "$package_output"
 mkdir -p "$package_dir"
 cp "$output" "$package_dir/"
 cp "$icon_output" "$package_dir/"
 cp "$desktop_output" "$package_dir/"
 cp "$install_output" "$package_dir/"
-tar -C dist -czf "$package_output" "$package_name"
-rm -rf "$package_dir"
+tar -C "$package_root" -czf "$package_output" "$package_name"
+rm -rf "$package_root"
 
 echo "Fertig: $output"
 echo "Linux-Paket: $package_output"
