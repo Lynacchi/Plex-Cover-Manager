@@ -31,6 +31,9 @@ go build -mod=vendor -trimpath -buildvcs=false \
 icon_output="dist/plex-cover-manager.png"
 desktop_output="dist/PlexCoverManager-v${version}-linux-${goarch}.desktop"
 install_output="dist/install-linux-desktop.sh"
+package_name="PlexCoverManager-v${version}-linux-${goarch}"
+package_dir="dist/${package_name}"
+package_output="dist/${package_name}.tar.gz"
 
 cp assets/app.png "$icon_output"
 cat > "$desktop_output" <<EOF
@@ -71,4 +74,14 @@ echo "Installiert: \$desktop_dir/plex-cover-manager.desktop"
 EOF
 chmod +x "$install_output"
 
+rm -rf "$package_dir" "$package_output"
+mkdir -p "$package_dir"
+cp "$output" "$package_dir/"
+cp "$icon_output" "$package_dir/"
+cp "$desktop_output" "$package_dir/"
+cp "$install_output" "$package_dir/"
+tar -C dist -czf "$package_output" "$package_name"
+rm -rf "$package_dir"
+
 echo "Fertig: $output"
+echo "Linux-Paket: $package_output"

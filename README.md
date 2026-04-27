@@ -42,17 +42,23 @@ Die Windows-App benötigt keine Installation. Einfach die passende EXE starten.
 
 ### Linux
 
-- `PlexCoverManager-v0.4.3-linux-amd64`
-  Natives Linux-Binary für x86_64/amd64-Systeme.
+- `PlexCoverManager-v0.4.3-linux-amd64.tar.gz`
+  Archiv mit nativem Linux-Binary, Icon, `.desktop`-Datei und Install-Skript für x86_64/amd64-Systeme.
 
-Nach dem Download ausführbar machen und starten:
+Nach dem Download entpacken und starten:
 
 ```bash
+tar -xzf PlexCoverManager-v0.4.3-linux-amd64.tar.gz
+cd PlexCoverManager-v0.4.3-linux-amd64
 chmod +x PlexCoverManager-v0.4.3-linux-amd64
 ./PlexCoverManager-v0.4.3-linux-amd64
 ```
 
-Für ein Menü-/Launcher-Icon unter Linux liegen zusätzlich `plex-cover-manager.png`, eine `.desktop`-Datei und `install-linux-desktop.sh` in `dist/`.
+Für ein Menü-/Launcher-Icon unter Linux:
+
+```bash
+./install-linux-desktop.sh
+```
 
 Datei- und Ordnerdialoge nutzen unter Linux `zenity` oder `kdialog`; Datei-/Ordneröffnen nutzt `xdg-open` oder `gio`.
 
